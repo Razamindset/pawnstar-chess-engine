@@ -1,0 +1,15 @@
+external
+
+# Ignore compiled binary files
+*.o
+*.out
+*.exe
+chess  # Ignore the compiled chess executable (if named "chess")
+
+# Ignore build directories (if using CMake or Make)
+/build/
+/bin/
+/obj/
+
+#
+.vscode/
