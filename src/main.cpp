@@ -5,6 +5,6 @@
 int main() {
   Engine engine;
   engine.initializeEngine();
-  std::cout << engine.getBestMove(2);
+  std::cout << engine.getBestMove(5);
   return 0;
 }

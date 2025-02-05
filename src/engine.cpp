@@ -1,17 +1,12 @@
 #include "engine.hpp"
 
-void Engine::initializeEngine() { std::cout << "Enigne Initialized!\n"; }
+void Engine::initializeEngine() { std::cout << "Engine Initialized!\n"; }
 
 void Engine::setPostion(const std::string fen) { board = Board(fen); }
 
 bool Engine::isGameOver() {
-  std::pair<chess::GameResultReason, chess::GameResult> result =
-      board.isGameOver();
-
-  if (result.second != GameResult::NONE) {
-    return true;
-  }
-  return false;
+  auto result = board.isGameOver();
+  return result.second != GameResult::NONE;
 }
 
 chess::PieceType getPieceType(PieceGenType piece) {
@@ -35,8 +30,7 @@ chess::PieceType getPieceType(PieceGenType piece) {
 
 int Engine::evaluatePosition(const Board& board) {
   int score = 0;
-
-  for (int piece = PAWN; piece <= KING; piece <<= 1) {  // Iterate powers of 2
+  for (int piece = PAWN; piece <= KING; piece <<= 1) {
     score += pieceValues[piece] *
              board
                  .pieces(getPieceType(static_cast<PieceGenType>(piece)),
@@ -48,9 +42,6 @@ int Engine::evaluatePosition(const Board& board) {
                          Color::BLACK)
                  .count();
   }
-
-  // Todo Add positional evaluation here later
-
   return score;
 }
 
@@ -59,18 +50,25 @@ int Engine::minmax(int depth, bool maximizingPlayer, int alpha, int beta) {
   if (depth == 0 || isGameOver()) {
     return evaluatePosition(board);
   }
-  std::cout << board << "\n";
 
-  std::cout << "Side to move: "
+  std::cout << "\nCurrent Board State:\n" << board << "\n";
+  std::cout << "Depth: " << depth << ", Side to move: "
             << (board.sideToMove() == chess::Color::WHITE ? "White" : "Black")
-            << depth << maximizingPlayer << std::endl;
+            << "\n";
+
+  // if ((board.sideToMove() == chess::Color::WHITE) != maximizingPlayer) {
+  //   std::cout << "Error: Side to move mismatch!\n";
+  //   return maximizingPlayer ? -100000 : 100000;
+  // }
 
   Movelist moves;
   movegen::legalmoves(moves, board);
 
-  for (auto&& move : moves) {
-    std::cout << uci::moveToUci(move);
+  std::cout << "Legal moves: ";
+  for (const auto& move : moves) {
+    std::cout << uci::moveToUci(move) << " ";
   }
+  std::cout << "\n";
 
   // So we use a var called maximizing player
   // For understanding we say maximizing=true which means it was white to
@@ -89,18 +87,14 @@ int Engine::minmax(int depth, bool maximizingPlayer, int alpha, int beta) {
 
   if (maximizingPlayer) {
     int maxEval = -100000;
-
-    for (auto&& move : moves) {
-      std::cout << "Making move for maximizing player";
-
+    for (const auto& move : moves) {
+      std::cout << "White attempting move: " << uci::moveToUci(move) << "\n";
       board.makeMove(move);
       int eval = minmax(depth - 1, false, alpha, beta);
       board.unmakeMove(move);
 
       maxEval = std::max(maxEval, eval);
-
       alpha = std::max(alpha, eval);
-
       if (beta <= alpha) {
         // Beta factor starts from +ive infinity and black tries to decrease it
         // while alpha starts from -ive infinty so white tries to increase it If
@@ -111,19 +105,16 @@ int Engine::minmax(int depth, bool maximizingPlayer, int alpha, int beta) {
     }
     return maxEval;
   } else {
-    int minEval = 10000;
-
-    for (auto&& move : moves) {
-      std::cout << "Making move for minimizing player";
+    int minEval = 100000;
+    for (const auto& move : moves) {
+      std::cout << "Black attempting move: " << uci::moveToUci(move) << "\n";
       board.makeMove(move);
       int eval = minmax(depth - 1, true, alpha, beta);
+      board.unmakeMove(move);
+
       minEval = std::min(minEval, eval);
-
-      beta = std::min(eval, beta);
-
-      if (alpha >= beta) {
-        break;
-      }
+      beta = std::min(beta, eval);
+      if (beta <= alpha) break;
     }
     return minEval;
   }
@@ -131,21 +122,17 @@ int Engine::minmax(int depth, bool maximizingPlayer, int alpha, int beta) {
 
 std::string Engine::getBestMove(int depth) {
   if (isGameOver()) return "null";
+
   Movelist moves;
   movegen::legalmoves(moves, board);
-
-  if (moves.empty()) return "null";  // Handle case where no moves exist
-
-  int bestValue = -100000;
+  if (moves.empty()) return "null";
 
   Move bestMove = moves[0];
+  int bestValue = -100000;
 
-  for (auto&& move : moves) {
-    std::cout << "Side to move: "
-              << (board.sideToMove() == chess::Color::WHITE ? "White" : "Black")
-              << std::endl;
-    std::cout << "Move being made: " << uci::moveToUci(move) << std::endl;
-
+  std::cout << "\nCalculating best move at depth " << depth << "\n";
+  for (const auto& move : moves) {
+    std::cout << "Evaluating move: " << uci::moveToUci(move) << "\n";
     board.makeMove(move);
     int value = minmax(depth - 1, false, -100000, 100000);
     board.unmakeMove(move);
@@ -155,5 +142,8 @@ std::string Engine::getBestMove(int depth) {
       bestMove = move;
     }
   }
+
+  std::cout << "Best move found: " << uci::moveToUci(bestMove)
+            << " with value: " << bestValue << "\n";
   return uci::moveToUci(bestMove);
 }
