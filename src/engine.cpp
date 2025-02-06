@@ -4,11 +4,13 @@ void Engine::initializeEngine() { std::cout << "Engine Initialized!\n"; }
 
 void Engine::setPostion(const std::string fen) { board = Board(fen); }
 
+// Check if game has concluded
 bool Engine::isGameOver() {
   auto result = board.isGameOver();
   return result.second != GameResult::NONE;
 }
 
+// Convert custom PieceType to chess::PieceType
 chess::PieceType getPieceType(PieceGenType piece) {
   switch (piece) {
     case PAWN:
@@ -28,114 +30,161 @@ chess::PieceType getPieceType(PieceGenType piece) {
   }
 }
 
+// Evaluate position using material balance and game status
 int Engine::evaluatePosition(const Board& board) {
-  int score = 0;
-  for (int piece = PAWN; piece <= KING; piece <<= 1) {
-    score += pieceValues[piece] *
-             board
-                 .pieces(getPieceType(static_cast<PieceGenType>(piece)),
-                         Color::WHITE)
-                 .count();
-    score -= pieceValues[piece] *
-             board
-                 .pieces(getPieceType(static_cast<PieceGenType>(piece)),
-                         Color::BLACK)
-                 .count();
+  // Check for terminal game states first
+  std::pair<GameResultReason, GameResult> result = board.isGameOver();
+  if (result.second != GameResult::NONE) {
+    if (result.first == GameResultReason::CHECKMATE) {
+      return (board.sideToMove() == Color::WHITE)
+                 ? std::numeric_limits<int>::min()
+                 : std::numeric_limits<int>::max();
+    }
+    return 0;  // Draw conditions
   }
-  return score;
+
+  // Material evaluation constants
+  constexpr int PAWN_VALUE = 100;
+  constexpr int KNIGHT_VALUE = 300;
+  constexpr int BISHOP_VALUE = 320;
+  constexpr int ROOK_VALUE = 500;
+  constexpr int QUEEN_VALUE = 900;
+
+  // Calculate material advantage
+  auto countMaterial = [&](Color color) {
+    return board.pieces(PieceType::PAWN, color).count() * PAWN_VALUE +
+           board.pieces(PieceType::KNIGHT, color).count() * KNIGHT_VALUE +
+           board.pieces(PieceType::BISHOP, color).count() * BISHOP_VALUE +
+           board.pieces(PieceType::ROOK, color).count() * ROOK_VALUE +
+           board.pieces(PieceType::QUEEN, color).count() * QUEEN_VALUE;
+  };
+
+  return countMaterial(Color::WHITE) - countMaterial(Color::BLACK);
 }
 
-int Engine::minmax(int depth, bool maximizingPlayer, int alpha, int beta) {
-  // This will be called recursively so we need to add a base case
+// Get material value of piece type
+int Engine::getPieceValue(Piece piece) {
+  switch (piece) {
+    case PieceGenType::PAWN:
+      return 100;
+    case PieceGenType::KNIGHT:
+      return 300;
+    case PieceGenType::BISHOP:
+      return 320;
+    case PieceGenType::ROOK:
+      return 500;
+    case PieceGenType::QUEEN:
+      return 900;
+    default:
+      return 0;  // King has no material value
+  }
+}
+
+// Order moves to improve alpha-beta efficiency
+void Engine::orderMoves(Movelist& moves) {
+  std::vector<std::pair<Move, int>> scoredMoves;
+  scoredMoves.reserve(moves.size());
+
+  for (const auto& move : moves) {
+    int score = 0;
+
+    // Prioritize captures using MVV-LVA
+    if (board.isCapture(move)) {
+      Square from = move.from();
+      Square to = move.to();
+
+      // Trying to get the target and the vivtim piece
+      Piece attacker = board.at(from);
+      Piece victim = board.at(from);
+
+      score += getPieceValue(attacker) - getPieceValue(victim);
+    }
+
+    if (move.promotionType() == QUEEN) {
+      score += 900;
+    }
+    if (move.promotionType() == KNIGHT) {
+      score += 300;
+    }
+    if (move.promotionType() == BISHOP) {
+      score += 320;
+    }
+    if (move.promotionType() == ROOK) {
+      score += 500;
+    }
+
+    // TODO: Add additional heuristics
+
+    scoredMoves.emplace_back(move, score);
+  }
+
+  // Sort moves by descending score
+  std::sort(scoredMoves.begin(), scoredMoves.end(),
+            [](const auto& a, const auto& b) { return a.second > b.second; });
+
+  // Replace original move list with sorted moves
+  moves.clear();
+  for (const auto& [move, score] : scoredMoves) {
+    moves.add(move);
+  }
+}
+
+int Engine::search(int depth, int alpha, int beta) {
+  positionsSearched++;
+
   if (depth == 0 || isGameOver()) {
     return evaluatePosition(board);
   }
 
-  std::cout << "\nCurrent Board State:\n" << board << "\n";
-  std::cout << "Depth: " << depth << ", Side to move: "
-            << (board.sideToMove() == chess::Color::WHITE ? "White" : "Black")
-            << "\n";
-
-  // if ((board.sideToMove() == chess::Color::WHITE) != maximizingPlayer) {
-  //   std::cout << "Error: Side to move mismatch!\n";
-  //   return maximizingPlayer ? -100000 : 100000;
-  // }
-
   Movelist moves;
   movegen::legalmoves(moves, board);
+  // orderMoves(moves);
 
-  std::cout << "Legal moves: ";
+  // Return evaluation if no legal moves
+  if (moves.empty()) {
+    return evaluatePosition(board);
+  }
+
+  int bestEvaluation = std::numeric_limits<int>::min();
+
   for (const auto& move : moves) {
-    std::cout << uci::moveToUci(move) << " ";
-  }
-  std::cout << "\n";
+    board.makeMove(move);
+    int evaluation = -search(depth - 1, -beta, -alpha);
+    board.unmakeMove(move);
 
-  // So we use a var called maximizing player
-  // For understanding we say maximizing=true which means it was white to
-  // move For each move white can play we will again call the minimax function
-  // recursively and set the maximizing player to false so it is black to move;
-  // For each move black can do and so we keep recursion until the required
-  // depth is reached
+    bestEvaluation = std::max(bestEvaluation, evaluation);
+    alpha = std::max(alpha, evaluation);
 
-  // Along with each recursion call we need to keep track of the best move
-  // possible which will be decided based on the evaluaion fucntion. In future
-  // we will extend the evaluation fuction for more better results
-
-  // Alpha tracks the best move for White, while Beta tracks the best move for
-  // Black If at any points a branch is found that is worse than beta we can
-  // drop it
-
-  if (maximizingPlayer) {
-    int maxEval = -100000;
-    for (const auto& move : moves) {
-      std::cout << "White attempting move: " << uci::moveToUci(move) << "\n";
-      board.makeMove(move);
-      int eval = minmax(depth - 1, false, alpha, beta);
-      board.unmakeMove(move);
-
-      maxEval = std::max(maxEval, eval);
-      alpha = std::max(alpha, eval);
-      if (beta <= alpha) {
-        // Beta factor starts from +ive infinity and black tries to decrease it
-        // while alpha starts from -ive infinty so white tries to increase it If
-        // at any point blacks best move becomes smaller or equal to that of
-        // white beta. Means that black has a better option than this move
-        break;
-      }
+    if (alpha >= beta) {
+      break;  // Beta cutoff
     }
-    return maxEval;
-  } else {
-    int minEval = 100000;
-    for (const auto& move : moves) {
-      std::cout << "Black attempting move: " << uci::moveToUci(move) << "\n";
-      board.makeMove(move);
-      int eval = minmax(depth - 1, true, alpha, beta);
-      board.unmakeMove(move);
-
-      minEval = std::min(minEval, eval);
-      beta = std::min(beta, eval);
-      if (beta <= alpha) break;
-    }
-    return minEval;
   }
+
+  return bestEvaluation;
 }
-
+// Find best move using iterative search
 std::string Engine::getBestMove(int depth) {
   if (isGameOver()) return "null";
 
+  positionsSearched = 0;  // Reset search counter
   Movelist moves;
   movegen::legalmoves(moves, board);
   if (moves.empty()) return "null";
 
   Move bestMove = moves[0];
-  int bestValue = -100000;
+  int bestValue = std::numeric_limits<int>::min();
 
-  std::cout << "\nCalculating best move at depth " << depth << "\n";
+  std::cout << "\nSearching at depth " << depth << "...\n";
+
   for (const auto& move : moves) {
-    std::cout << "Evaluating move: " << uci::moveToUci(move) << "\n";
     board.makeMove(move);
-    int value = minmax(depth - 1, false, -100000, 100000);
+    // Negate result since next player will minimize our score
+    int value = -search(depth - 1, std::numeric_limits<int>::min(),
+                        std::numeric_limits<int>::max());
     board.unmakeMove(move);
+
+    std::cout << "  Move: " << uci::moveToUci(move) << "  Evaluation: " << value
+              << "\n";
 
     if (value > bestValue) {
       bestValue = value;
@@ -143,7 +192,9 @@ std::string Engine::getBestMove(int depth) {
     }
   }
 
-  std::cout << "Best move found: " << uci::moveToUci(bestMove)
-            << " with value: " << bestValue << "\n";
+  std::cout << "\nBest move: " << uci::moveToUci(bestMove)
+            << "  Evaluation: " << bestValue
+            << "\nPositions analyzed: " << positionsSearched << "\n";
+
   return uci::moveToUci(bestMove);
 }

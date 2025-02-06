@@ -2,6 +2,7 @@
 #define ENGINE_H
 
 #include <algorithm>
+#include <limits>
 #include <string>
 
 #include "chess.hpp"
@@ -11,9 +12,12 @@ using namespace chess;
 class Engine {
  private:
   Board board;
-  int evaluatePosition(const Board &board);
+  int evaluatePosition(const Board& board);
   const int pieceValues[6] = {100, 320, 330, 500, 900, 20000};
-  int minmax(int depth, bool maximizingPlayer, int alpha, int beta);
+  int search(int depth, int aplha, int beta);
+  void orderMoves(Movelist& moves);
+  int getPieceValue(Piece piece);
+  int positionsSearched;
 
  public:
   bool isGameOver();
