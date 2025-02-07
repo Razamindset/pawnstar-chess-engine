@@ -36,7 +36,7 @@ int Engine::evaluatePosition(const Board& board) {
   std::pair<GameResultReason, GameResult> result = board.isGameOver();
   if (result.second != GameResult::NONE) {
     if (result.first == GameResultReason::CHECKMATE) {
-      return (board.sideToMove() == Color::WHITE) ? -MATE_SCORE : MATE_SCORE;
+      return (board.sideToMove() == Color::WHITE) ? MATE_SCORE : -MATE_SCORE;
     }
     return 0;  // Draw conditions
   }
@@ -85,19 +85,29 @@ void Engine::orderMoves(Movelist& moves) {
   for (const auto& move : moves) {
     int score = 0;
 
-    // Prioritize checkmate
-    // board.makeMove(move);
-    // if (isGameOver() &&
-    //     board.isGameOver().first == GameResultReason::CHECKMATE) {
-    //   score += MATE_SCORE;  // Highest priority for mate
-    // }
-    // board.unmakeMove(move);
+    // // Prioritize checkmate
+    board.makeMove(move);
+    if (isGameOver() &&
+        board.isGameOver().first == GameResultReason::CHECKMATE) {
+      score += MATE_SCORE;  // Highest priority for mate
+    }
+    // to check for check lets see if the king square was attacked or not
+    Square king_sq = board.kingSq(board.sideToMove());
+
+    bool inCheck = board.isAttacked(king_sq, board.sideToMove() == Color::BLACK
+                                                 ? Color::WHITE
+                                                 : Color::BLACK);
+    if (inCheck) {
+      // std::cout << board << "\n";
+      score += 1000;  // always check the forcing moves first
+    }
+    board.unmakeMove(move);
 
     // Prioritize captures using MVV-LVA
     if (board.isCapture(move)) {
       Piece attacker = board.at(move.from());
       Piece victim = board.at(move.to());
-      score += getPieceValue(victim) * 10 - getPieceValue(attacker);
+      score += getPieceValue(victim) - getPieceValue(attacker);
     }
 
     // Prioritize promotions
@@ -192,6 +202,8 @@ std::string Engine::getBestMove(int depth) {
   Movelist moves;
   movegen::legalmoves(moves, board);
   if (moves.empty()) return "null";
+
+  orderMoves(moves);
 
   Move bestMove = moves[0];
   int bestValue = std::numeric_limits<int>::min();
