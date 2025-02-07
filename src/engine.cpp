@@ -30,25 +30,23 @@ PieceType Engine::getPieceType(PieceGenType piece) {
   }
 }
 
-// Evaluate position using material balance and game status
 int Engine::evaluatePosition(const Board& board) {
-  // Check for terminal game states first
+  // 1. Check for terminal states
   std::pair<GameResultReason, GameResult> result = board.isGameOver();
   if (result.second != GameResult::NONE) {
     if (result.first == GameResultReason::CHECKMATE) {
       return (board.sideToMove() == Color::WHITE) ? MATE_SCORE : -MATE_SCORE;
     }
-    return 0;  // Draw conditions
+    return 0;  // Draw
   }
 
-  // Material evaluation constants
+  // 2. Material evaluation
   constexpr int PAWN_VALUE = 100;
   constexpr int KNIGHT_VALUE = 300;
   constexpr int BISHOP_VALUE = 320;
   constexpr int ROOK_VALUE = 500;
   constexpr int QUEEN_VALUE = 900;
 
-  // Calculate material advantage
   auto countMaterial = [&](Color color) {
     return board.pieces(PieceType::PAWN, color).count() * PAWN_VALUE +
            board.pieces(PieceType::KNIGHT, color).count() * KNIGHT_VALUE +
@@ -59,36 +57,42 @@ int Engine::evaluatePosition(const Board& board) {
 
   int eval = countMaterial(Color::WHITE) - countMaterial(Color::BLACK);
 
+  // 3. Piece-Square Tables (PSTs)
   for (Square sq = 0; sq < 64; sq++) {
     Piece piece = board.at(sq);
     if (piece.type() == PieceType::NONE) continue;
 
-    int pieceValue = getPieceValue(piece);
+    int index =
+        (piece.color() == Color::WHITE) ? sq.index() : mirrorIndex(sq.index());
     int squareValue = 0;
 
     switch (piece.type()) {
       case PAWN:
-        squareValue = PAWN_MAP[sq.index()];
+        squareValue = PAWN_MAP[index];
         break;
       case KNIGHT:
-        squareValue = KNIGHT_MAP[sq.index()];
+        squareValue = KNIGHT_MAP[index];
         break;
       case BISHOP:
-        squareValue = BISHOP_MAP[sq.index()];
+        squareValue = BISHOP_MAP[index];
         break;
       case ROOK:
-        squareValue = ROOK_MAP[sq.index()];
+        squareValue = ROOK_MAP[index];
         break;
       case QUEEN:
-        squareValue = QUEEN_MAP[sq.index()];
+        squareValue = QUEEN_MAP[index];
         break;
       case KING:
-        squareValue = KING_MAP[sq.index()];
+        squareValue =
+            (board.pieces(PieceType::QUEEN, Color::WHITE).count() +
+                 board.pieces(PieceType::QUEEN, Color::BLACK).count() ==
+             0)
+                ? KING_ENDGAME_MAP[index]
+                : KING_MAP[index];
         break;
     }
 
-    eval += (piece.color() == Color::WHITE) ? (pieceValue + squareValue)
-                                            : -(pieceValue + squareValue);
+    eval += (piece.color() == Color::WHITE) ? squareValue : -squareValue;
   }
 
   return (board.sideToMove() == Color::WHITE) ? eval : -eval;
@@ -155,6 +159,7 @@ void Engine::orderMoves(Movelist& moves) {
   // Sort moves by descending score
   std::sort(scoredMoves.begin(), scoredMoves.end(),
             [](const auto& a, const auto& b) { return a.second > b.second; });
+  // Todo Need to learn this sorting magic function ask gpt for now
 
   // Replace original move list with sorted moves
   moves.clear();
