@@ -46,10 +46,11 @@ int main() {
     for (const auto& move : moves) {
       if (uci::moveToUci(move) == inMove) {
         board.makeMove(move);
+        humanTurn = !humanTurn;
+
         break;
       }
     }
-    humanTurn = !humanTurn;
   }
 
   return 0;

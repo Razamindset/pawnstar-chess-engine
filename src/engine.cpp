@@ -58,6 +58,39 @@ int Engine::evaluatePosition(const Board& board) {
   };
 
   int eval = countMaterial(Color::WHITE) - countMaterial(Color::BLACK);
+
+  for (Square sq = 0; sq < 64; sq++) {
+    Piece piece = board.at(sq);
+    if (piece.type() == PieceType::NONE) continue;
+
+    int pieceValue = getPieceValue(piece);
+    int squareValue = 0;
+
+    switch (piece.type()) {
+      case PAWN:
+        squareValue = PAWN_MAP[sq.index()];
+        break;
+      case KNIGHT:
+        squareValue = KNIGHT_MAP[sq.index()];
+        break;
+      case BISHOP:
+        squareValue = BISHOP_MAP[sq.index()];
+        break;
+      case ROOK:
+        squareValue = ROOK_MAP[sq.index()];
+        break;
+      case QUEEN:
+        squareValue = QUEEN_MAP[sq.index()];
+        break;
+      case KING:
+        squareValue = KING_MAP[sq.index()];
+        break;
+    }
+
+    eval += (piece.color() == Color::WHITE) ? (pieceValue + squareValue)
+                                            : -(pieceValue + squareValue);
+  }
+
   return (board.sideToMove() == Color::WHITE) ? eval : -eval;
 }
 
