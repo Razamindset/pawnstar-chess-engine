@@ -11,7 +11,7 @@ bool Engine::isGameOver() {
 }
 
 // Convert custom PieceType to chess::PieceType
-chess::PieceType getPieceType(PieceGenType piece) {
+PieceType Engine::getPieceType(PieceGenType piece) {
   switch (piece) {
     case PAWN:
       return chess::PieceType::PAWN;
@@ -36,9 +36,7 @@ int Engine::evaluatePosition(const Board& board) {
   std::pair<GameResultReason, GameResult> result = board.isGameOver();
   if (result.second != GameResult::NONE) {
     if (result.first == GameResultReason::CHECKMATE) {
-      return (board.sideToMove() == Color::WHITE)
-                 ? std::numeric_limits<int>::min()
-                 : std::numeric_limits<int>::max();
+      return (board.sideToMove() == Color::WHITE) ? -MATE_SCORE : MATE_SCORE;
     }
     return 0;  // Draw conditions
   }
@@ -80,7 +78,6 @@ int Engine::getPieceValue(Piece piece) {
   }
 }
 
-// Order moves to improve alpha-beta efficiency
 void Engine::orderMoves(Movelist& moves) {
   std::vector<std::pair<Move, int>> scoredMoves;
   scoredMoves.reserve(moves.size());
@@ -88,32 +85,26 @@ void Engine::orderMoves(Movelist& moves) {
   for (const auto& move : moves) {
     int score = 0;
 
+    // Prioritize checkmate
+    // board.makeMove(move);
+    // if (isGameOver() &&
+    //     board.isGameOver().first == GameResultReason::CHECKMATE) {
+    //   score += MATE_SCORE;  // Highest priority for mate
+    // }
+    // board.unmakeMove(move);
+
     // Prioritize captures using MVV-LVA
     if (board.isCapture(move)) {
-      Square from = move.from();
-      Square to = move.to();
-
-      // Trying to get the target and the vivtim piece
-      Piece attacker = board.at(from);
-      Piece victim = board.at(from);
-
-      score += getPieceValue(attacker) - getPieceValue(victim);
+      Piece attacker = board.at(move.from());
+      Piece victim = board.at(move.to());
+      score += getPieceValue(victim) * 10 - getPieceValue(attacker);
     }
 
-    if (move.promotionType() == QUEEN) {
-      score += 900;
-    }
-    if (move.promotionType() == KNIGHT) {
-      score += 300;
-    }
-    if (move.promotionType() == BISHOP) {
-      score += 320;
-    }
-    if (move.promotionType() == ROOK) {
-      score += 500;
-    }
-
-    // TODO: Add additional heuristics
+    // Prioritize promotions
+    if (move.promotionType() == QUEEN) score += 900;
+    if (move.promotionType() == ROOK) score += 500;
+    if (move.promotionType() == BISHOP) score += 320;
+    if (move.promotionType() == KNIGHT) score += 300;
 
     scoredMoves.emplace_back(move, score);
   }
@@ -129,23 +120,54 @@ void Engine::orderMoves(Movelist& moves) {
   }
 }
 
+int Engine::searchAllCaptures(int alpha, int beta) {
+  int evaluation = evaluatePosition(board);
+  if (evaluation >= beta) return evaluation;
+  alpha = std::max(alpha, evaluation);
+
+  Movelist moves;
+  movegen::legalmoves(moves, board);
+
+  // Filter for captures only
+  Movelist captureMoves;
+  for (const auto& move : moves) {
+    if (board.isCapture(move)) {
+      captureMoves.add(move);
+    }
+  }
+
+  orderMoves(captureMoves);
+
+  for (const auto& move : captureMoves) {
+    board.makeMove(move);
+    int ev = -searchAllCaptures(-alpha, -beta);
+    board.unmakeMove(move);
+
+    if (ev >= beta) return beta;
+
+    alpha = std::max(alpha, ev);
+  }
+
+  return alpha;
+}
+
 int Engine::search(int depth, int alpha, int beta) {
   positionsSearched++;
 
   if (depth == 0 || isGameOver()) {
-    return evaluatePosition(board);
+    return searchAllCaptures(alpha, beta);
   }
 
   Movelist moves;
   movegen::legalmoves(moves, board);
-  // orderMoves(moves);
+  orderMoves(moves);
 
   // Return evaluation if no legal moves
   if (moves.empty()) {
     return evaluatePosition(board);
   }
 
-  int bestEvaluation = std::numeric_limits<int>::min();
+  int bestEvaluation = -MATE_SCORE;
 
   for (const auto& move : moves) {
     board.makeMove(move);

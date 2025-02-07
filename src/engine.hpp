@@ -9,6 +9,8 @@
 
 using namespace chess;
 
+constexpr int MATE_SCORE = 1000000;
+
 class Engine {
  private:
   Board board;
@@ -17,6 +19,8 @@ class Engine {
   int search(int depth, int aplha, int beta);
   void orderMoves(Movelist& moves);
   int getPieceValue(Piece piece);
+  int searchAllCaptures(int alpha, int beta);
+  chess::PieceType getPieceType(PieceGenType piece);
   int positionsSearched;
 
  public:

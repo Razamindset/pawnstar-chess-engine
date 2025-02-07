@@ -23,7 +23,7 @@ cd ..
 To compile PawnStar using `g++`, on linux run the following command:
 
 ```sh
-g++ -I external/chess-library/include src/main.cpp -o pawnstar.out
+g++ -I external/chess-library/include ./src/main.cpp ./src/engine.cpp -o main.out
 ```
 
 Replace `src/main.cpp` with the actual source file containing your `main` function.
