@@ -57,7 +57,8 @@ int Engine::evaluatePosition(const Board& board) {
            board.pieces(PieceType::QUEEN, color).count() * QUEEN_VALUE;
   };
 
-  return countMaterial(Color::WHITE) - countMaterial(Color::BLACK);
+  int eval = countMaterial(Color::WHITE) - countMaterial(Color::BLACK);
+  return (board.sideToMove() == Color::WHITE) ? eval : -eval;
 }
 
 // Get material value of piece type
@@ -98,7 +99,6 @@ void Engine::orderMoves(Movelist& moves) {
                                                  ? Color::WHITE
                                                  : Color::BLACK);
     if (inCheck) {
-      // std::cout << board << "\n";
       score += 1000;  // always check the forcing moves first
     }
     board.unmakeMove(move);
@@ -206,7 +206,7 @@ std::string Engine::getBestMove(int depth) {
   orderMoves(moves);
 
   Move bestMove = moves[0];
-  int bestValue = std::numeric_limits<int>::min();
+  int bestValue = -MATE_SCORE;
 
   std::cout << "\nSearching at depth " << depth << "...\n";
 
@@ -217,8 +217,9 @@ std::string Engine::getBestMove(int depth) {
                         std::numeric_limits<int>::max());
     board.unmakeMove(move);
 
-    std::cout << "  Move: " << uci::moveToUci(move) << "  Evaluation: " << value
-              << "\n";
+    // std::cout << "  Move: " << uci::moveToUci(move) << "  Evaluation: " <<
+    // value
+    //           << "\n";
 
     if (value > bestValue) {
       bestValue = value;
