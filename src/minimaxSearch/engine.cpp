@@ -45,11 +45,13 @@ int Engine::evaluatePosition(const Board& board) {
   return eval;
 }
 
-int Engine::minmaxSearch(int depth, bool maximizingPlayer) {
+int Engine::minmaxSearch(int depth, int alpha, int beta,
+                         bool maximizingPlayer) {
   positionsSearched++;
   if (depth == 0 || isGameOver(board)) {
     return evaluatePosition(board);
   }
+
   Movelist moves;
   movegen::legalmoves(moves, board);
 
@@ -58,16 +60,26 @@ int Engine::minmaxSearch(int depth, bool maximizingPlayer) {
     return evaluatePosition(board);
   }
 
+  // alpha is the best eval so far for maximixing and beta for minimizing player
+  // If at any point we see that there is a branch worse than alpha or beta
+  // we can cut it
   if (maximizingPlayer) {
     // Maximinzing from -ive extreme
     int bestEval = -MATE_SCORE;
 
     for (const auto& move : moves) {
       board.makeMove(move);
-      int evaluation = minmaxSearch(depth - 1, false);
+      int evaluation = minmaxSearch(depth - 1, alpha, beta, false);
       board.unmakeMove(move);
 
       bestEval = std::max(evaluation, bestEval);
+
+      alpha = std::max(alpha, bestEval);
+      // beta is always greater than alpha
+      // If beta becomes less than alpha means that position is better for the
+      // other player which we avoid
+      // To avoid that we donot search the bad braches and prune/cut them
+      if (beta <= alpha) break;  // **Prune bad branches**
     }
 
     return bestEval;
@@ -78,10 +90,17 @@ int Engine::minmaxSearch(int depth, bool maximizingPlayer) {
 
     for (const auto& move : moves) {
       board.makeMove(move);
-      int evaluation = minmaxSearch(depth - 1, true);
+      int evaluation = minmaxSearch(depth - 1, alpha, beta, true);
       board.unmakeMove(move);
 
       bestEval = std::min(evaluation, bestEval);
+      beta = std::min(beta, bestEval);
+
+      // beta is always greater than alpha
+      // Black wants the beta to be less than alpha (minimize)
+      // If any branch gives beta greator than alpha we donot need that
+      // So we prune it
+      if (alpha >= beta) break;  // **Prune bad branches**
     }
 
     return bestEval;
@@ -105,7 +124,8 @@ Move Engine::getBestMove(int depth) {
     Move bestMove = moves[0];
 
     // The worst outcome can only result in a mate as we donot have infinty here
-    int bestEval = -MATE_SCORE;
+    int bestEval =
+        board.sideToMove() == Color::WHITE ? -MATE_SCORE : MATE_SCORE;
 
     std::cout << "\nSearching at depth " << depth << "...\n";
 
@@ -113,13 +133,17 @@ Move Engine::getBestMove(int depth) {
       board.makeMove(move);
       // already made a move for the maximizing player in the
       // above line so pass false
-      int evaluation = minmaxSearch(depth, false);
+      int evaluation = minmaxSearch(depth, -MATE_SCORE, MATE_SCORE, false);
       std::cout << "  Move: " << uci::moveToUci(move)
                 << "  Evaluation: " << evaluation << "\n";
       board.unmakeMove(move);
 
-      if (evaluation > bestEval) {
+      if (board.sideToMove() == Color::WHITE && (evaluation > bestEval)) {
         bestEval = std::max(evaluation, bestEval);
+        bestMove = move;
+      } else if (evaluation < bestEval) {
+        // It was black to move and we found a better move
+        bestEval = std::min(evaluation, bestEval);
         bestMove = move;
       }
     }

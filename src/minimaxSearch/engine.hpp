@@ -15,7 +15,7 @@ class Engine {
   Board board;
   int positionsSearched = 0;
   int evaluatePosition(const Board& board);
-  int minmaxSearch(int depth, bool maximizingPlayer);
+  int minmaxSearch(int depth, int alpha, int beta, bool maximizingPlayer);
 
  public:
   bool isGameOver(const Board& board);
