@@ -251,8 +251,8 @@ std::string Engine::getBestMove(int depth) {
   for (const auto& move : moves) {
     board.makeMove(move);
     // Negate result since next player will minimize our score
-    int value = -search(depth - 1, std::numeric_limits<int>::min(),
-                        std::numeric_limits<int>::max());
+    int value = -search(depth - 1, -MATE_SCORE,
+                        MATE_SCORE);
     board.unmakeMove(move);
 
     // std::cout << "  Move: " << uci::moveToUci(move) << "  Evaluation: " <<

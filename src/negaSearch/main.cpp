@@ -22,14 +22,25 @@ int main() {
 
   // engine.setPostion("2r1kbnr/p2ppp1p/B7/8/8/4PN2/P2P1PpP/R3K1R1 w k - 2 5");
   // std::cout << engine.getBestMove(6);
-  bool humanTurn = true;
+  bool humanTurn = false;
   Board board;
   while (!engine.isGameOver()) {
     if (!humanTurn) {
       engine.setPostion(board.getFen());
       auto bestMove = engine.getBestMove(4);
-      std::cout << "Engine best move: " << bestMove << "\n";
+      Movelist moves;
+      movegen::legalmoves(moves, board);
+      for (const auto& move : moves) {
+        if (uci::moveToUci(move) == bestMove) {
+          board.makeMove(move);
+          std::cout << board << "\n";
+
+          break;
+        }
+      }
+      continue;
     }
+
     Movelist moves;
     movegen::legalmoves(moves, board);
 
