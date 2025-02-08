@@ -2,7 +2,7 @@
 
 void Engine::initializeEngine() { std::cout << "Engine Initialized \n"; }
 
-void Engine::setPostion(const std::string& fen) { board = Board(fen); }
+void Engine::setPosition(const std::string& fen) { board = Board(fen); }
 
 void Engine::printBoard() { std::cout << board; }
 
@@ -14,6 +14,71 @@ bool Engine::isGameOver(const Board& board) {
 GameResultReason Engine::getGameOverReason(const Board& board) {
   auto result = board.isGameOver();
   return result.first;
+}
+
+// Get material value of piece type
+int Engine::getPieceValue(Piece piece) {
+  switch (piece) {
+    case PieceGenType::PAWN:
+      return 100;
+    case PieceGenType::KNIGHT:
+      return 300;
+    case PieceGenType::BISHOP:
+      return 320;
+    case PieceGenType::ROOK:
+      return 500;
+    case PieceGenType::QUEEN:
+      return 900;
+    default:
+      return 0;  // King has no material value
+  }
+}
+
+void Engine::orderMoves(Movelist& moves) {
+  std::vector<std::pair<Move, int>> scoredMoves;
+  scoredMoves.reserve(moves.size());
+
+  for (const auto& move : moves) {
+    int score = 0;
+
+    // Prioritize checkmate
+    board.makeMove(move);
+    if (isGameOver(board) &&
+        getGameOverReason(board) == GameResultReason::CHECKMATE) {
+      score += MATE_SCORE;  // Highest priority for mate
+    }
+
+    if (board.inCheck()) {
+      score += 1000;  // always check the forcing moves first
+    }
+    board.unmakeMove(move);
+
+    // Prioritize captures using MVV-LVA
+    if (board.isCapture(move)) {
+      Piece attacker = board.at(move.from());
+      Piece victim = board.at(move.to());
+      score += getPieceValue(victim) - getPieceValue(attacker);
+    }
+
+    // Prioritize promotions
+    if (move.promotionType() == QUEEN) score += 900;
+    if (move.promotionType() == ROOK) score += 500;
+    if (move.promotionType() == BISHOP) score += 320;
+    if (move.promotionType() == KNIGHT) score += 300;
+
+    scoredMoves.emplace_back(move, score);
+  }
+
+  // Todo Need to learn this sorting magic function ask gpt for now
+  // Sort moves by descending score
+  std::sort(scoredMoves.begin(), scoredMoves.end(),
+            [](const auto& a, const auto& b) { return a.second > b.second; });
+
+  // Replace original move list with sorted moves
+  moves.clear();
+  for (const auto& [move, score] : scoredMoves) {
+    moves.add(move);
+  }
 }
 
 int Engine::evaluatePosition(const Board& board) {
@@ -42,6 +107,43 @@ int Engine::evaluatePosition(const Board& board) {
 
   int eval = countMaterial(Color::WHITE) - countMaterial(Color::BLACK);
 
+  for (Square sq = 0; sq < 64; sq++) {
+    Piece piece = board.at(sq);
+    if (piece.type() == PieceType::NONE) continue;
+
+    int index =
+        (piece.color() == Color::WHITE) ? sq.index() : mirrorIndex(sq.index());
+    int squareValue = 0;
+
+    switch (piece.type()) {
+      case PAWN:
+        squareValue = PAWN_MAP[index];
+        break;
+      case KNIGHT:
+        squareValue = KNIGHT_MAP[index];
+        break;
+      case BISHOP:
+        squareValue = BISHOP_MAP[index];
+        break;
+      case ROOK:
+        squareValue = ROOK_MAP[index];
+        break;
+      case QUEEN:
+        squareValue = QUEEN_MAP[index];
+        break;
+      case KING:
+        squareValue =
+            (board.pieces(PieceType::QUEEN, Color::WHITE).count() +
+                 board.pieces(PieceType::QUEEN, Color::BLACK).count() ==
+             0)
+                ? KING_ENDGAME_MAP[index]
+                : KING_MAP[index];
+        break;
+    }
+
+    eval += (piece.color() == Color::WHITE) ? squareValue : -squareValue;
+  }
+
   return eval;
 }
 
@@ -59,6 +161,8 @@ int Engine::minmaxSearch(int depth, int alpha, int beta,
   if (moves.empty()) {
     return evaluatePosition(board);
   }
+
+  orderMoves(moves);
 
   // alpha is the best eval so far for maximixing and beta for minimizing player
   // If at any point we see that there is a branch worse than alpha or beta
@@ -107,7 +211,7 @@ int Engine::minmaxSearch(int depth, int alpha, int beta,
   }
 }
 
-Move Engine::getBestMove(int depth) {
+std::string Engine::getBestMove(int depth) {
   Movelist moves;
   chess::movegen::legalmoves(moves, board);
   positionsSearched = 0;
@@ -121,6 +225,8 @@ Move Engine::getBestMove(int depth) {
     // With each search we can update the best eval and the best move
     // We will return the best move at the end
 
+    orderMoves(moves);
+
     Move bestMove = moves[0];
 
     // The worst outcome can only result in a mate as we donot have infinty here
@@ -131,26 +237,38 @@ Move Engine::getBestMove(int depth) {
 
     for (const auto& move : moves) {
       board.makeMove(move);
-      // already made a move for the maximizing player in the
-      // above line so pass false
+
+      // If there is a mate in 1 then imediately return
+      if (isGameOver(board)) {
+        if (getGameOverReason(board) == GameResultReason::CHECKMATE) {
+          return uci::moveToUci(move);
+        }
+      }
+
       int evaluation = minmaxSearch(depth, -MATE_SCORE, MATE_SCORE, false);
+
       std::cout << "  Move: " << uci::moveToUci(move)
                 << "  Evaluation: " << evaluation << "\n";
+
       board.unmakeMove(move);
 
-      if (board.sideToMove() == Color::WHITE && (evaluation > bestEval)) {
-        bestEval = std::max(evaluation, bestEval);
-        bestMove = move;
-      } else if (evaluation < bestEval) {
-        // It was black to move and we found a better move
-        bestEval = std::min(evaluation, bestEval);
-        bestMove = move;
+      if (board.sideToMove() == Color::WHITE) {
+        if (evaluation > bestEval) {
+          bestEval = evaluation;
+          bestMove = move;
+        }
+      } else {  // Black to move
+        if (evaluation < bestEval) {
+          bestEval = evaluation;
+          bestMove = move;
+        }
       }
     }
 
     std::cout << "\nBest move: " << uci::moveToUci(bestMove)
               << "  Evaluation: " << bestEval
               << "\nPositions analyzed: " << positionsSearched << "\n";
-    return bestMove;
+    return uci::moveToUci(bestMove);
   }
+  return "null";
 }
