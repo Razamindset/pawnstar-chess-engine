@@ -81,9 +81,12 @@ class Engine {
   Board board;
   int positionsSearched = 0;
   int evaluatePosition(const Board& board);
+  int searchAllCaptures(int alpha, int beta);
   int minmaxSearch(int depth, int alpha, int beta, bool maximizingPlayer);
-  void orderMoves(Movelist& moves);
+  void orderMoves(Movelist& moves, Move ttMove);
   int getPieceValue(Piece piece);
+
+  // tts related
   std::unordered_map<std::array<unsigned char, 24>, TTEntry, ArrayHash>
       transpositionTable;
   void storeTTEntry(PackedBoard& board, int depth, int value, NodeType type,

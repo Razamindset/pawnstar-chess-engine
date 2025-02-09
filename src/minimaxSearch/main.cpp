@@ -9,11 +9,11 @@ int main() {
 
   // Test FEN
   engine.setPosition(
-      "r1bq1rk1/pp1n1ppp/2p1pn2/8/2BP4/2N2N2/PPP2PPP/R1BQK2R w KQ - 0 10");
+      "r1bqr1k1/p4p2/2p1pn1p/4n3/2pP1Kp1/2N3B1/PPPQ1PPP/R6R b - - 1 17");
 
   // Middle game test pos
-  engine.setPosition(
-      "r3k2r/ppp2ppp/2n1b3/2B1P3/4P3/2P5/PP3PPP/RNB2RK1 b kq - 0 1");
+  // engine.setPosition(
+  //     "r3k2r/ppp2ppp/2n1b3/2B1P3/4P3/2P5/PP3PPP/RNB2RK1 b kq - 0 1");
 
   engine.printBoard();
 

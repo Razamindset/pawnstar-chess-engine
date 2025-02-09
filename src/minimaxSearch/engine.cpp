@@ -34,27 +34,21 @@ int Engine::getPieceValue(Piece piece) {
   }
 }
 
-void Engine::orderMoves(Movelist& moves) {
+void Engine::orderMoves(Movelist& moves, Move ttMove) {
   std::vector<std::pair<Move, int>> scoredMoves;
   scoredMoves.reserve(moves.size());
 
   for (const auto& move : moves) {
-    int score = 0;
+    int score = -800;  // worst queen takes pawn
 
-    // Prioritize checkmate
-    board.makeMove(move);
-    if (isGameOver(board) &&
-        getGameOverReason(board) == GameResultReason::CHECKMATE) {
-      score += MATE_SCORE;  // Highest priority for mate
-    }
-
-    if (board.inCheck()) {
-      score += 1000;  // always check the forcing moves first
-    }
-    board.unmakeMove(move);
+    // ! If we make n moves on the board for each reacursive call that is
+    // computationally heavy If we skip this step the engine will still look
+    // at all the moves but 50% performace boost with same result. So we donot
+    // need to check for checks and mates here
 
     // Prioritize captures using MVV-LVA
     if (board.isCapture(move)) {
+      score = 0;
       Piece attacker = board.at(move.from());
       Piece victim = board.at(move.to());
       score += getPieceValue(victim) - getPieceValue(attacker);
@@ -65,6 +59,11 @@ void Engine::orderMoves(Movelist& moves) {
     if (move.promotionType() == ROOK) score += 500;
     if (move.promotionType() == BISHOP) score += 320;
     if (move.promotionType() == KNIGHT) score += 300;
+
+    // The best move from tt should be placed on top
+    if (move == ttMove) {
+      score += 1000;
+    }
 
     scoredMoves.emplace_back(move, score);
   }
@@ -147,9 +146,60 @@ int Engine::evaluatePosition(const Board& board) {
   return eval;
 }
 
+int Engine::searchAllCaptures(int alpha, int beta) {
+  // For now we have refined our function to only check for captures of higher
+  // pieces by lower ones to increase performance. If we donot do that our
+  // extended search becomes even slower than noraml minmax search
+  int evaluation = evaluatePosition(board);
+  if (evaluation >= beta) return beta;
+  alpha = std::max(alpha, evaluation);
+
+  // We can try extending making this serach faster by using transpotion tables
+  PackedBoard packedBoard = Board::Compact::encode(board);
+
+  auto it = transpositionTable.find(packedBoard);
+
+  if (it != transpositionTable.end()) {
+    TTEntry entry = it->second;
+    if (entry.type == NodeType::EXACT) return entry.value;
+    if (entry.type == NodeType::BETA) alpha = std::max(alpha, entry.value);
+    if (entry.type == NodeType::ALPHA && entry.value <= alpha) return alpha;
+  }
+
+  Movelist moves;
+  movegen::legalmoves(moves, board);
+
+  for (const auto& move : moves) {
+    if (!board.isCapture(move)) continue;  // Process only captures
+    Piece attacker = board.at(move.from());
+    Piece victim = board.at(move.to());
+    if (getPieceValue(attacker) > getPieceValue(victim)) continue;
+
+    board.makeMove(move);
+    int score = -searchAllCaptures(-beta, -alpha);  // Negamax form
+    board.unmakeMove(move);
+
+    if (score >= beta) {
+      transpositionTable[packedBoard] = {0, score, NodeType::BETA,
+                                         Move::NO_MOVE};
+      return beta;
+    }
+    alpha = std::max(alpha, score);
+  }
+
+  transpositionTable[packedBoard] = {
+      0, alpha, (alpha > evaluation ? NodeType::EXACT : NodeType::ALPHA),
+      Move::NO_MOVE};
+  return alpha;
+}
+
 void Engine::storeTTEntry(PackedBoard& board, int depth, int value,
                           NodeType type, Move bestMove) {
-  // Always replace with deeper searches or same depth entries
+  auto it = transpositionTable.find(board);
+  // We will never replace a deepr serach witha shallower
+  if (it != transpositionTable.end() && it->second.depth >= depth) {
+    return;
+  }
   transpositionTable[board] = {depth, value, type, bestMove};
 }
 
@@ -192,8 +242,11 @@ int Engine::minmaxSearch(int depth, int alpha, int beta,
   }
 
   // At depth 0, return evaluation
+  // if (depth == 0) {
+  //   return evaluatePosition(board);
+  // }
   if (depth == 0) {
-    return evaluatePosition(board);
+    return searchAllCaptures(alpha, beta);
   }
 
   PackedBoard packedBoard = Board::Compact::encode(board);
@@ -204,6 +257,8 @@ int Engine::minmaxSearch(int depth, int alpha, int beta,
     return entry->value;
   }
 
+  Move ttMove = entry ? entry->bestMove : Move::NO_MOVE;
+
   Movelist moves;
   movegen::legalmoves(moves, board);
 
@@ -211,7 +266,7 @@ int Engine::minmaxSearch(int depth, int alpha, int beta,
     return evaluatePosition(board);
   }
 
-  orderMoves(moves);
+  orderMoves(moves, ttMove);
 
   Move bestMove;
   int originalAlpha = alpha;
@@ -263,9 +318,10 @@ std::string Engine::getBestMove(int depth) {
   if (moves.empty()) {
     return "null";
   }
+  PackedBoard packedBoard = Board::Compact::encode(board);
 
-  orderMoves(moves);
   Move bestMove = moves[0];
+  orderMoves(moves, bestMove);
 
   // For black, we want to maximize negative scores (closer to 0)
   // For white, we want to maximize positive scores
