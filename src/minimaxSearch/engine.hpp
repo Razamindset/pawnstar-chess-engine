@@ -2,9 +2,24 @@
 #define ENGINE_H
 
 #include <algorithm>
+#include <array>
+#include <functional>
 #include <string>
+#include <unordered_map>
 
 #include "chess.hpp"
+
+struct ArrayHash {
+  template <typename T, std::size_t N>
+  std::size_t operator()(const std::array<T, N>& arr) const {
+    std::size_t hash_value = 0;
+    for (const auto& elem : arr) {
+      hash_value ^= std::hash<T>{}(elem) + 0x9e3779b9 + (hash_value << 6) +
+                    (hash_value >> 2);
+    }
+    return hash_value;
+  }
+};
 
 using namespace chess;
 
@@ -52,6 +67,15 @@ constexpr int mirrorIndex(int sq) {
   return sq ^ 56;  // Flips the rank (0-7 ↔ 7-0) while keeping the file the same
 }
 
+enum class NodeType { EXACT, ALPHA, BETA };
+
+struct TTEntry {
+  int depth;
+  int value;
+  NodeType type;
+  Move bestMove;
+};
+
 class Engine {
  private:
   Board board;
@@ -60,6 +84,11 @@ class Engine {
   int minmaxSearch(int depth, int alpha, int beta, bool maximizingPlayer);
   void orderMoves(Movelist& moves);
   int getPieceValue(Piece piece);
+  std::unordered_map<std::array<unsigned char, 24>, TTEntry, ArrayHash>
+      transpositionTable;
+  void storeTTEntry(PackedBoard& board, int depth, int value, NodeType type,
+                    Move bestMove);
+  TTEntry* probeTTEntry(PackedBoard& board, int depth, int alpha, int beta);
 
  public:
   bool isGameOver(const Board& board);
@@ -68,5 +97,12 @@ class Engine {
   void printBoard();
   std::string getBestMove(int depth);
   GameResultReason getGameOverReason(const Board& board);
+  size_t getTableSize() const { return transpositionTable.size(); }
+
+  size_t getTableMemoryUsage() const {
+    // Size of each entry + size of the key (array) * number of entries
+    return (sizeof(TTEntry) + sizeof(std::array<unsigned char, 24>)) *
+           transpositionTable.size();
+  }
 };
 #endif

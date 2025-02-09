@@ -147,68 +147,112 @@ int Engine::evaluatePosition(const Board& board) {
   return eval;
 }
 
+void Engine::storeTTEntry(PackedBoard& board, int depth, int value,
+                          NodeType type, Move bestMove) {
+  // Always replace with deeper searches or same depth entries
+  transpositionTable[board] = {depth, value, type, bestMove};
+}
+
+// Todo learn more about this shit. Shitty code keeps getting shitter.
+TTEntry* Engine::probeTTEntry(PackedBoard& board, int depth, int alpha,
+                              int beta) {
+  auto it = transpositionTable.find(board);
+  if (it != transpositionTable.end()) {
+    TTEntry* entry = &it->second;
+
+    //! God knows what this is
+    // Only use entries from equal or deeper searches
+    if (entry->depth >= depth) {
+      // Value is exact - can be used directly
+      if (entry->type == NodeType::EXACT) {
+        return entry;
+      }
+
+      // Value is an upper bound and fails low - can use for alpha cutoff
+      if (entry->type == NodeType::ALPHA && entry->value <= alpha) {
+        return entry;
+      }
+
+      // Value is a lower bound and fails high - can use for beta cutoff
+      if (entry->type == NodeType::BETA && entry->value >= beta) {
+        return entry;
+      }
+    }
+  }
+  return nullptr;
+}
+
 int Engine::minmaxSearch(int depth, int alpha, int beta,
                          bool maximizingPlayer) {
   positionsSearched++;
-  if (depth == 0 || isGameOver(board)) {
+
+  // Check for immediate game over
+  if (isGameOver(board)) {
     return evaluatePosition(board);
+  }
+
+  // At depth 0, return evaluation
+  if (depth == 0) {
+    return evaluatePosition(board);
+  }
+
+  PackedBoard packedBoard = Board::Compact::encode(board);
+
+  // Probe transposition table
+  TTEntry* entry = probeTTEntry(packedBoard, depth, alpha, beta);
+  if (entry != nullptr) {
+    return entry->value;
   }
 
   Movelist moves;
   movegen::legalmoves(moves, board);
 
-  // Return evaluation if no legal moves
   if (moves.empty()) {
     return evaluatePosition(board);
   }
 
   orderMoves(moves);
 
-  // alpha is the best eval so far for maximixing and beta for minimizing player
-  // If at any point we see that there is a branch worse than alpha or beta
-  // we can cut it
-  if (maximizingPlayer) {
-    // Maximinzing from -ive extreme
-    int bestEval = -MATE_SCORE;
+  Move bestMove;
+  int originalAlpha = alpha;
+  int bestEval = maximizingPlayer ? -MATE_SCORE : MATE_SCORE;
 
-    for (const auto& move : moves) {
-      board.makeMove(move);
-      int evaluation = minmaxSearch(depth - 1, alpha, beta, false);
-      board.unmakeMove(move);
+  for (const auto& move : moves) {
+    board.makeMove(move);
+    int evaluation = minmaxSearch(depth - 1, alpha, beta, !maximizingPlayer);
+    board.unmakeMove(move);
 
-      bestEval = std::max(evaluation, bestEval);
-
+    if (maximizingPlayer) {
+      if (evaluation > bestEval) {
+        bestEval = evaluation;
+        bestMove = move;
+      }
       alpha = std::max(alpha, bestEval);
-      // beta is always greater than alpha
-      // If beta becomes less than alpha means that position is better for the
-      // other player which we avoid
-      // To avoid that we donot search the bad braches and prune/cut them
-      if (beta <= alpha) break;  // **Prune bad branches**
-    }
-
-    return bestEval;
-
-  } else {
-    // Minimizing from +ive extreme
-    int bestEval = MATE_SCORE;
-
-    for (const auto& move : moves) {
-      board.makeMove(move);
-      int evaluation = minmaxSearch(depth - 1, alpha, beta, true);
-      board.unmakeMove(move);
-
-      bestEval = std::min(evaluation, bestEval);
+    } else {
+      if (evaluation < bestEval) {
+        bestEval = evaluation;
+        bestMove = move;
+      }
       beta = std::min(beta, bestEval);
-
-      // beta is always greater than alpha
-      // Black wants the beta to be less than alpha (minimize)
-      // If any branch gives beta greator than alpha we donot need that
-      // So we prune it
-      if (alpha >= beta) break;  // **Prune bad branches**
     }
 
-    return bestEval;
+    if (beta <= alpha) {
+      break;
+    }
   }
+
+  // Determine node type and store position
+  NodeType nodeType;
+  if (bestEval <= originalAlpha) {
+    nodeType = NodeType::ALPHA;
+  } else if (bestEval >= beta) {
+    nodeType = NodeType::BETA;
+  } else {
+    nodeType = NodeType::EXACT;
+  }
+
+  storeTTEntry(packedBoard, depth, bestEval, nodeType, bestMove);
+  return bestEval;
 }
 
 std::string Engine::getBestMove(int depth) {
@@ -216,59 +260,53 @@ std::string Engine::getBestMove(int depth) {
   chess::movegen::legalmoves(moves, board);
   positionsSearched = 0;
 
-  if (!moves.empty()) {
-    // For min max search we have a maximizing player and a minimizing player
-    // Lets say it is white to move and the best Evaluation is set to -infinity
-    // Now white is the maximizing player
-    // White is looking for any move that can give better evalution than
-    // negative infinty/maximum
-    // With each search we can update the best eval and the best move
-    // We will return the best move at the end
+  if (moves.empty()) {
+    return "null";
+  }
 
-    orderMoves(moves);
+  orderMoves(moves);
+  Move bestMove = moves[0];
 
-    Move bestMove = moves[0];
+  // For black, we want to maximize negative scores (closer to 0)
+  // For white, we want to maximize positive scores
+  int bestEval = board.sideToMove() == Color::WHITE ? -MATE_SCORE : MATE_SCORE;
 
-    // The worst outcome can only result in a mate as we donot have infinty here
-    int bestEval =
-        board.sideToMove() == Color::WHITE ? -MATE_SCORE : MATE_SCORE;
+  std::cout << "\nSearching at depth " << depth << "...\n";
 
-    std::cout << "\nSearching at depth " << depth << "...\n";
+  for (const auto& move : moves) {
+    board.makeMove(move);
 
-    for (const auto& move : moves) {
-      board.makeMove(move);
+    // The next player will be opposite color, so if current is white,
+    // next player (maximizingPlayer) will be false
+    int evaluation = minmaxSearch(depth - 1, -MATE_SCORE, MATE_SCORE,
+                                  board.sideToMove() == Color::WHITE);
 
-      // If there is a mate in 1 then imediately return
-      if (isGameOver(board)) {
-        if (getGameOverReason(board) == GameResultReason::CHECKMATE) {
-          return uci::moveToUci(move);
-        }
+    std::cout << "  Move: " << uci::moveToUci(move)
+              << "  Evaluation: " << evaluation << "\n";
+
+    board.unmakeMove(move);
+
+    // For white: pick highest score
+    // For black: pick lowest score
+    if (board.sideToMove() == Color::WHITE) {
+      if (evaluation > bestEval) {
+        bestEval = evaluation;
+        bestMove = move;
       }
-
-      int evaluation = minmaxSearch(depth, -MATE_SCORE, MATE_SCORE, false);
-
-      std::cout << "  Move: " << uci::moveToUci(move)
-                << "  Evaluation: " << evaluation << "\n";
-
-      board.unmakeMove(move);
-
-      if (board.sideToMove() == Color::WHITE) {
-        if (evaluation > bestEval) {
-          bestEval = evaluation;
-          bestMove = move;
-        }
-      } else {  // Black to move
-        if (evaluation < bestEval) {
-          bestEval = evaluation;
-          bestMove = move;
-        }
+    } else {
+      if (evaluation < bestEval) {
+        bestEval = evaluation;
+        bestMove = move;
       }
     }
-
-    std::cout << "\nBest move: " << uci::moveToUci(bestMove)
-              << "  Evaluation: " << bestEval
-              << "\nPositions analyzed: " << positionsSearched << "\n";
-    return uci::moveToUci(bestMove);
   }
-  return "null";
+  std::cout << "\nBest move: " << uci::moveToUci(bestMove)
+            << "  Evaluation: " << bestEval
+            << "\nPositions analyzed: " << positionsSearched
+            << "\nTransposition table entries: " << getTableSize()
+            << "\nTransposition table memory: " << getTableMemoryUsage() / 1024
+            << " KB"
+            << "\n";
+
+  return uci::moveToUci(bestMove);
 }
