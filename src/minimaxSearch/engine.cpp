@@ -1,5 +1,7 @@
 #include "engine.hpp"
 
+// TODO Needs extensive Refactor
+
 void Engine::initializeEngine() { std::cout << "Engine Initialized \n"; }
 
 void Engine::setPosition(const std::string& fen) { board = Board(fen); }
@@ -154,7 +156,8 @@ int Engine::searchAllCaptures(int alpha, int beta) {
   if (evaluation >= beta) return beta;
   alpha = std::max(alpha, evaluation);
 
-  // We can try extending making this serach faster by using transpotion tables
+  // We can try extending making this serach faster by using transposition
+  // tables
   PackedBoard packedBoard = Board::Compact::encode(board);
 
   auto it = transpositionTable.find(packedBoard);
@@ -337,8 +340,8 @@ std::string Engine::getBestMove(int depth) {
     int evaluation = minmaxSearch(depth - 1, -MATE_SCORE, MATE_SCORE,
                                   board.sideToMove() == Color::WHITE);
 
-    std::cout << "  Move: " << uci::moveToUci(move)
-              << "  Evaluation: " << evaluation << "\n";
+    //std::cout << "  Move: " << uci::moveToUci(move)
+     //         << "  Evaluation: " << evaluation << "\n";
 
     board.unmakeMove(move);
 
