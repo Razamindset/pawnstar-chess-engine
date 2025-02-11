@@ -41,16 +41,11 @@ void Engine::orderMoves(Movelist& moves) {
   for (const auto& move : moves) {
     int score = -800;  // worst queen takes pawn
 
+    // We cn
     // ! If we make n moves on the board for each reacursive call that is
     // computationally heavy If we skip this step the engine will still look
     // at all the moves but 50% performace boost with same result. So we donot
     // need to check for checks and mates here
-
-    // Donot know if it is computationlay expensive..
-    std::string moveSan = uci::moveToSan(board, move);
-    if (moveSan.find('+')) {
-      score += 100;
-    }
 
     // Prioritize captures using MVV-LVA
     if (board.isCapture(move)) {
@@ -160,6 +155,7 @@ int Engine::searchAllCaptures(int alpha, int beta) {
   // stop too early and miss tactical sequences (e.g., winning a pawn but then
   // losing a queen on the next move).
 
+  positionsSearched++;
   int evaluation = evaluatePosition(board);
 
   // Alpha-beta pruning: If the evaluation is greater than or equal to beta,
@@ -178,12 +174,27 @@ int Engine::searchAllCaptures(int alpha, int beta) {
     if (!board.isCapture(move))
       continue;  // Only consider captures in quiescence search.
 
-    board.makeMove(move);
+    // The following line is really necessary. I donot know if it is the best
+    // thing but it works. What we do is only consider capturing moves of higher
+    // value with lower value pieces. This brings down our search time from 30s
+    // to 6-7s
+    Piece attacker = board.at(move.from());
+    Piece victim = board.at(move.to());
 
+    // Allow equal captures (like queen takes queen)
+    if (getPieceValue(attacker) > getPieceValue(victim) + MARGIN) continue;
+
+    // Consider promoted pawns specially
+    if (move.typeOf() == Move::PROMOTION) {
+      // Always consider pawn captures that lead to promotion
+      if (attacker.type() == PAWN) goto makeMove;
+    }
+
+  makeMove:
+    board.makeMove(move);
     // Negamax with alpha-beta pruning: The roles of alpha and beta are swapped
     // because each layer alternates between maximizing and minimizing.
     int score = -searchAllCaptures(-beta, -alpha);
-
     board.unmakeMove(move);
 
     // Beta cutoff: If we find a move better than beta for the maximizing
@@ -315,6 +326,8 @@ int Engine::negaMax(int depth, int alpha, int beta) {
   //* I hope it explains my thought process because sometimes chat gpt or docs
   //* use fancy words that are harder to visualize or understand
 
+  positionsSearched++;
+
   if (isGameOver(board)) {
     return evaluatePosition(board);
   }
@@ -404,5 +417,6 @@ std::string Engine::getBestMove(int depth) {
   } else {
     std::cout << "Evaluation: " << bestScore << "\n";
   }
+  std::cout << "Postions searched: " << positionsSearched << "\n";
   return uci::moveToUci(bestMove);
 }
