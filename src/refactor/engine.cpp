@@ -46,6 +46,12 @@ void Engine::orderMoves(Movelist& moves) {
     // at all the moves but 50% performace boost with same result. So we donot
     // need to check for checks and mates here
 
+    // Donot know if it is computationlay expensive..
+    std::string moveSan = uci::moveToSan(board, move);
+    if (moveSan.find('+')) {
+      score += 100;
+    }
+
     // Prioritize captures using MVV-LVA
     if (board.isCapture(move)) {
       score = 0;
@@ -55,6 +61,7 @@ void Engine::orderMoves(Movelist& moves) {
     }
 
     // Prioritize promotions
+
     if (move.promotionType() == QUEEN) score += 900;
     if (move.promotionType() == ROOK) score += 500;
     if (move.promotionType() == BISHOP) score += 320;
@@ -83,7 +90,7 @@ void Engine::orderMoves(Movelist& moves) {
 int Engine::evaluatePosition(const Board& board) {
   if (isGameOver(board)) {
     if (getGameOverReason(board) == GameResultReason::CHECKMATE) {
-      return (board.sideToMove() == Color::WHITE) ? MATE_SCORE : -MATE_SCORE;
+      return (board.sideToMove() == Color::WHITE) ? -MATE_SCORE : MATE_SCORE;
     }
     return 0;
   }
@@ -144,6 +151,53 @@ int Engine::evaluatePosition(const Board& board) {
 
   // Convert to side-to-move perspective for negamax
   return (board.sideToMove() == Color::WHITE) ? eval : -eval;
+}
+
+int Engine::searchAllCaptures(int alpha, int beta) {
+  // Quiescence search: When we reach the evaluation depth, we extend the search
+  // to explore all possible captures until we reach a quiet position (no more
+  // captures). This helps avoid the horizon effect—where a normal search might
+  // stop too early and miss tactical sequences (e.g., winning a pawn but then
+  // losing a queen on the next move).
+
+  int evaluation = evaluatePosition(board);
+
+  // Alpha-beta pruning: If the evaluation is greater than or equal to beta,
+  // the minimizing player has found a move that the maximizing player would
+  // never allow. So, we prune this branch.
+  if (evaluation >= beta) return beta;
+
+  // Update alpha to track the best score found so far for the maximizing
+  // player.
+  alpha = std::max(evaluation, alpha);
+
+  Movelist moves;
+  movegen::legalmoves(moves, board);
+
+  for (const auto& move : moves) {
+    if (!board.isCapture(move))
+      continue;  // Only consider captures in quiescence search.
+
+    board.makeMove(move);
+
+    // Negamax with alpha-beta pruning: The roles of alpha and beta are swapped
+    // because each layer alternates between maximizing and minimizing.
+    int score = -searchAllCaptures(-beta, -alpha);
+
+    board.unmakeMove(move);
+
+    // Beta cutoff: If we find a move better than beta for the maximizing
+    // player, the minimizing player will never allow this position, so we prune
+    // the search.
+    if (score >= beta) {
+      return beta;
+    }
+
+    // Update alpha to the best score found so far.
+    alpha = std::max(alpha, score);
+  }
+
+  return alpha;
 }
 
 int Engine::negaMax(int depth, int alpha, int beta) {
@@ -220,9 +274,53 @@ int Engine::negaMax(int depth, int alpha, int beta) {
   //* Seeing that we discard the seach and go our home as not worth doing.
 
   //* NEGAMAX: the one implented here now
+  // Negamax algorithm is a simplified version of the minimax algorithm. We
+  // search based on the fact that the best move for maximizing player is the
+  // worst move for minimizing player. So if we wnat to get the evalution for
+  // the minimizing player we ca just flip the sign.
+  // 1. We always assume that the current player is maximizing
+  // 2.The trick is:
+  // If it’s White’s turn the evaluation is normal.
+  // If it’s Black’s turn the evaluation is negated -eval
+  // This way, every player simply picks the move that maximizes their own
+  // evaluation, but the sign flips every time the turn changes.
+  // Consider this example finding the best move for white:
+  //               White (Root)
+  //                       │
+  //            ┌──────────┴───────────┐
+  //            │                      │
+  //     Move A (e4)            Move B (d4)
+  //            │                      │
+  //       ┌────┴────┐            ┌────┴────┐
+  //       │         │            │         │
+  //   -4 d5        +2 e5        -3 c5     -5 e6
+  //       │         │            │         │
+  //       4         -2            3         5
+  //* So at the base the eavluation function gives as say +4 after d5 so we
+  // neagate and give it to black. From those two black calculates the best move
+  // as -4 and passes it up. Same happens at the other side and we get -5. Now
+  // we again negate the values so they become +5 and +4. If you observe what we
+  // really did was cleverly we got the best moves or best evalution from the
+  // bottom layer to the top layer. and the same results with less code.
+  //* Now we can also apply alpha beta pruning here. Say alpha is the best for
+  // white so far. In branch two last layer when its black to move we find a
+  // move for black that is less in evalution than alpha. So we can stop
+  // exploration at this branch and prune it. No that alpha and beta values are
+  // swapped and flipped at each recursion. As we use only one value that is
+  // alpha so when it is other player to move we swap alpha with beta as that
+  // player will also act as minimizing player and neagate the value as the
+  // evaluations are also negated. In this was each player at recursion acts as
+  // maximizing player reducing the amoun tof code required
+
+  //* I hope it explains my thought process because sometimes chat gpt or docs
+  //* use fancy words that are harder to visualize or understand
+
+  if (isGameOver(board)) {
+    return evaluatePosition(board);
+  }
 
   if (depth == 0) {
-    return evaluatePosition(board);
+    return searchAllCaptures(alpha, beta);
   }
 
   Movelist moves;
@@ -255,6 +353,11 @@ int Engine::negaMax(int depth, int alpha, int beta) {
 }
 
 std::string Engine::getBestMove(int depth) {
+  //   bool isEndgame = (board.pieces(PieceType::QUEEN, Color::WHITE).count() +
+  //                     board.pieces(PieceType::QUEEN, Color::BLACK).count())
+  //                     == 0;
+
+  //   if (isEndgame) depth += 2;
   Movelist moves;
   chess::movegen::legalmoves(moves, board);
   positionsSearched = 0;
@@ -269,15 +372,37 @@ std::string Engine::getBestMove(int depth) {
 
   for (const auto& move : moves) {
     board.makeMove(move);
+    if (isGameOver(board)) {
+      if (board.sideToMove() == Color::WHITE) {
+        bestScore = -MATE_SCORE;
+        bestMove = move;
+      } else {
+        bestScore = MATE_SCORE;
+        bestMove = move;
+      }
+      break;
+    }
     int score = -negaMax(depth - 1, -MATE_SCORE, MATE_SCORE);
     board.unmakeMove(move);
 
     if (score > bestScore) {
       bestScore = score;
+
       bestMove = move;
     }
   }
 
-  std::cout << "Evaluation: " << bestScore << "\n";
-  return uci::moveToSan(board, bestMove);
+  // We always consider the player to be maximizing player so the evalution will
+  // always be in +ive even when black to move. We have handled the correct
+  // evalution for mate but for simple moves we cannot modify the eval value
+  // based on side to move as it will effect the next decission. So when we need
+  // the eval and it is not a mate we just put a negative sign for the black
+  if (!isGameOver(board) && board.sideToMove() == Color::WHITE) {
+    std::cout << "Evaluation: " << bestScore << "\n";
+  } else if (!isGameOver(board)) {
+    std::cout << "Evaluation: " << -bestScore << "\n";
+  } else {
+    std::cout << "Evaluation: " << bestScore << "\n";
+  }
+  return uci::moveToUci(bestMove);
 }

@@ -51,6 +51,14 @@ constexpr int mirrorIndex(int sq) {
   return sq ^ 56;  // Flips the rank (0-7 ↔ 7-0) while keeping the file the same
 }
 
+//! All the code is written by myself. I have taken advise from coding
+// assistants. But i have tried to write all of it myself. I may ask chatgpt for
+// correcting grammer mistakes in the comments I write so some of those may feel
+// like ai generated. For the most part i have written comments without help
+// from ai so that i can explain my own thought process and understanding. I
+// openly ask for suggestions on any errors found and may be reported, will be
+// apreciated.
+
 class Engine {
  private:
   Board board;
@@ -59,6 +67,7 @@ class Engine {
   int evaluatePosition(const Board& board);
   int getPieceValue(Piece piece);
   void orderMoves(Movelist& moves);
+  int searchAllCaptures(int alpha, int beta);
 
  public:
   void initializeEngine();

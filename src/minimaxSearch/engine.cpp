@@ -294,6 +294,10 @@ int Engine::minmaxSearch(int depth, int alpha, int beta,
       beta = std::min(beta, bestEval);
     }
 
+    // The best evalution found so far for minimizing player is less than that
+    // of maximizing player it means the maximizing player will never visit this
+    // path rather he will go to the path where he gets alpha and the postion
+    // resutls to be better for him
     if (beta <= alpha) {
       break;
     }
@@ -340,8 +344,8 @@ std::string Engine::getBestMove(int depth) {
     int evaluation = minmaxSearch(depth - 1, -MATE_SCORE, MATE_SCORE,
                                   board.sideToMove() == Color::WHITE);
 
-    //std::cout << "  Move: " << uci::moveToUci(move)
-     //         << "  Evaluation: " << evaluation << "\n";
+    // std::cout << "  Move: " << uci::moveToUci(move)
+    //          << "  Evaluation: " << evaluation << "\n";
 
     board.unmakeMove(move);
 
