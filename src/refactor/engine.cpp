@@ -34,11 +34,27 @@ int Engine::getPieceValue(Piece piece) {
   }
 }
 
-void Engine::orderMoves(Movelist& moves) {
+void Engine::opponentMoves(Move move) { board.makeMove(move); }
+
+void Engine::orderMoves(Movelist& moves, bool isWinning) {
   std::vector<std::pair<Move, int>> scoredMoves;
   scoredMoves.reserve(moves.size());
 
   for (const auto& move : moves) {
+    //* Now one of the issues is that our engine does not have any idea about
+    // the full game so it will very oftenly repeat moves at winnign positions.
+    // So what we do is that if its the engine's turn and it is better in eval
+    // and the next move leads to a draw by 3 fold repition remove that move
+    // entirely from the list. As there has to be some other move better
+    if (isWinning) {
+      board.makeMove(move);
+      if (board.isRepetition()) {
+        board.unmakeMove(move);
+        continue;  // Skip this move entirely
+      }
+      board.unmakeMove(move);
+    }
+
     int score = -800;  // worst queen takes pawn
 
     // We cn
@@ -62,11 +78,6 @@ void Engine::orderMoves(Movelist& moves) {
     if (move.promotionType() == BISHOP) score += 320;
     if (move.promotionType() == KNIGHT) score += 300;
 
-    // The best move from tt should be placed on top
-    // if (move == ttMove) {
-    //   score += 1000;
-    // }
-
     scoredMoves.emplace_back(move, score);
   }
 
@@ -82,10 +93,38 @@ void Engine::orderMoves(Movelist& moves) {
   }
 }
 
+int Engine::kingEndgameScore(const Board& board, Color us, Color op) {
+  Square ourKing = board.kingSq(us);
+  Square opponentKing = board.kingSq(op);
+
+  int score = 0;
+
+  int opKingFile = opponentKing.file();
+  int opKingRank = opponentKing.rank();
+
+  // Higher bonus for corner squares
+  if ((opKingFile == 0 || opKingFile == 7) &&
+      (opKingRank == 0 || opKingRank == 7)) {
+    score += 50;
+  }
+  // Bonus for being on the edge
+  else if (opKingFile == 0 || opKingFile == 7 || opKingRank == 0 ||
+           opKingRank == 7) {
+    score += 30;
+  }
+
+  int distance = manhattanDistance(ourKing, opponentKing);
+  score += (14 - distance) * 5;  // Closer = higher score
+
+  return score;
+}
+
 int Engine::evaluatePosition(const Board& board) {
   if (isGameOver(board)) {
     if (getGameOverReason(board) == GameResultReason::CHECKMATE) {
-      return (board.sideToMove() == Color::WHITE) ? -MATE_SCORE : MATE_SCORE;
+      // return (board.sideToMove() == Color::WHITE) ? -MATE_SCORE : MATE_SCORE;
+      // origional should be this but since we flip in negamax then:-
+      return (board.sideToMove() == Color::WHITE) ? MATE_SCORE : -MATE_SCORE;
     }
     return 0;
   }
@@ -107,6 +146,9 @@ int Engine::evaluatePosition(const Board& board) {
 
   int eval = countMaterial(Color::WHITE) - countMaterial(Color::BLACK);
 
+  bool isEndgame = (board.pieces(PieceType::QUEEN, Color::WHITE).count() +
+                        board.pieces(PieceType::QUEEN, Color::BLACK).count() ==
+                    0);
   for (Square sq = 0; sq < 64; sq++) {
     Piece piece = board.at(sq);
     if (piece.type() == PieceType::NONE) continue;
@@ -132,16 +174,15 @@ int Engine::evaluatePosition(const Board& board) {
         squareValue = QUEEN_MAP[index];
         break;
       case KING:
-        squareValue =
-            (board.pieces(PieceType::QUEEN, Color::WHITE).count() +
-                 board.pieces(PieceType::QUEEN, Color::BLACK).count() ==
-             0)
-                ? KING_ENDGAME_MAP[index]
-                : KING_MAP[index];
+        squareValue = isEndgame ? KING_ENDGAME_MAP[index] : KING_MAP[index];
         break;
     }
 
     eval += (piece.color() == Color::WHITE) ? squareValue : -squareValue;
+  }
+  if (isEndgame) {
+    eval += kingEndgameScore(board, Color::WHITE, Color::BLACK) -
+            kingEndgameScore(board, Color::BLACK, Color::WHITE);
   }
 
   // Convert to side-to-move perspective for negamax
@@ -343,13 +384,16 @@ int Engine::negaMax(int depth, int alpha, int beta) {
     return evaluatePosition(board);
   }
 
-  orderMoves(moves);
+  // Todo handle drawing logic here
+  orderMoves(moves, false);
 
   int maxScore = -MATE_SCORE;  // Should be defined as a very negative number
 
   for (const auto& move : moves) {
     board.makeMove(move);
     int score = -negaMax(depth - 1, -beta, -alpha);
+
+    // std::cout << "Move: " << uci::moveToUci(move) << " " << score << "\n";
     board.unmakeMove(move);
 
     if (score > maxScore) {
@@ -366,11 +410,9 @@ int Engine::negaMax(int depth, int alpha, int beta) {
 }
 
 std::string Engine::getBestMove(int depth) {
-  //   bool isEndgame = (board.pieces(PieceType::QUEEN, Color::WHITE).count() +
-  //                     board.pieces(PieceType::QUEEN, Color::BLACK).count())
-  //                     == 0;
-
-  //   if (isEndgame) depth += 2;
+  if (isGameOver(board)) {
+    return "null";
+  }
   Movelist moves;
   chess::movegen::legalmoves(moves, board);
   positionsSearched = 0;
@@ -379,13 +421,20 @@ std::string Engine::getBestMove(int depth) {
     return "null";
   }
 
-  orderMoves(moves);
+  int currentEval = evaluatePosition(board);
+  bool isWinning = (board.sideToMove() == Color::WHITE) ? currentEval > 100
+                                                        : currentEval < -100;
+
+  orderMoves(moves, isWinning);
   Move bestMove = moves[0];
   int bestScore = -MATE_SCORE;
 
   for (const auto& move : moves) {
     board.makeMove(move);
-    if (isGameOver(board)) {
+
+    // Correct mating score if gameOver
+    if (isGameOver(board) &&
+        getGameOverReason(board) == GameResultReason::CHECKMATE) {
       if (board.sideToMove() == Color::WHITE) {
         bestScore = -MATE_SCORE;
         bestMove = move;
@@ -395,6 +444,7 @@ std::string Engine::getBestMove(int depth) {
       }
       break;
     }
+
     int score = -negaMax(depth - 1, -MATE_SCORE, MATE_SCORE);
     board.unmakeMove(move);
 
@@ -418,5 +468,6 @@ std::string Engine::getBestMove(int depth) {
     std::cout << "Evaluation: " << bestScore << "\n";
   }
   std::cout << "Postions searched: " << positionsSearched << "\n";
+
   return uci::moveToUci(bestMove);
 }

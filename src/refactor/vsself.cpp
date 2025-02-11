@@ -24,9 +24,9 @@ std::string getReason(GameResultReason result, Board board) {
 int main() {
   Engine engine;
   engine.initializeEngine();
-  //   engine.setPosition("5rk1/1pp2ppp/1b3nn1/8/8/1B3NN1/1PP2PPP/5RK1 w - - 0
-  //   1");
 
+  // engine.setPosition("8/8/3k4/8/6Q1/8/3K4/8 w - - 0 1");
+  // Board board("8/8/3k4/8/6Q1/8/3K4/8 w - - 0 1");
   Board board;
 
   std::vector<std::string> moveHistory;  // Store moves in SAN format
@@ -45,6 +45,7 @@ int main() {
 
   while (true) {
     std::cout << board;
+    if (board.isGameOver().first != GameResultReason::NONE) break;
 
     // Measure time taken for move search
     auto start = std::chrono::high_resolution_clock::now();
@@ -56,7 +57,9 @@ int main() {
 
     Movelist moves;
     movegen::legalmoves(moves, board);
+    Move gMove;
 
+    std::cout << "The generated move was: " << bestMove << "\n";
     bool movePlayed = false;
     for (const auto& move : moves) {
       if (uci::moveToUci(move) == bestMove) {
@@ -65,6 +68,9 @@ int main() {
         moveHistory.push_back(sanMove);
 
         board.makeMove(move);
+        gMove = move;
+        engine.printBoard();
+
         movePlayed = true;
         break;
       }
@@ -89,7 +95,8 @@ int main() {
       break;
     }
 
-    engine.setPosition(board.getFen());
+    // engine.setPosition(board.getFen());
+    engine.opponentMoves(gMove);
   }
 
   // Determine and update result in PGN
