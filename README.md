@@ -43,8 +43,42 @@ After building, you can run the engine from the build directory:
 ./pawnstar
 ```
 
+## Development Status
+
+Currently implemented:
+
+- [x] Negamax search with alpha-beta
+- [x] Quiescence search
+- [x] Basic evaluation function
+- [x] MVV-LVA move ordering
+
+Under development:
+
+- [ ] Advanced evaluation features
+- [ ] Improved move ordering
+- [ ] Time management
+- [ ] Opening book support
+- [ ] Transposition tables
+
 ## Future Plans
 
 - Beat stockfish
+
+## License
+
+This project is licensed under the MIT License with an attribution requirement - see the [LICENSE](LICENSE) file for details.
+
+When using this code or substantial portions of it in your project, please include attribution:
+
+```
+Contains code from PawnStar Chess Engine (https://github.com/Razamindset/pawnstar-chess-engine)
+```
+
+## Attribution Notices
+
+PawnStar Chess Engine uses:
+
+- [chess-library](https://github.com/Disservin/chess-library) for board representation
+- Techniques and algorithms from [Chess Programming Wiki](https://www.chessprogramming.org)
 
 Stay tuned for updates!
