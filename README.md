@@ -1,39 +1,46 @@
 # PawnStar Chess Engine
 
-PawnStar is a chess engine written in C++ that originally aimed to implement board representation, move generation, and validation from scratch. However, to avoid reinventing the wheel, we now use the [chess-library](https://github.com/Disservin/chess-library) to handle board operations and move validation.
+PawnStar is a chess engine written in C++ that uses the [chess-library](https://github.com/Disservin/chess-library) for board operations and move validation.
 
-## Setup
+## Building the Project
+
+### Prerequisites
+
+- CMake (version 3.15 or higher)
+- A C++ compiler that supports C++17
+- Git (optional, only needed if you want to clone the repository)
+
+### Build Instructions
+
+1. Clone the repository (if you haven't already):
 
 ```sh
 git clone https://github.com/Razamindset/pawnstar-chess-engine
-cd pawnstar-chess-engine/
+cd pawnstar-chess-engine
 ```
 
-To use this project, clone the `chess-library` into an `external/` directory within your project:
+2. Create a build directory and navigate to it:
 
 ```sh
-mkdir -p external
-cd external
-git clone https://github.com/Disservin/chess-library.git
-cd ..
+mkdir build
+cd build
 ```
 
-## Compilation
-
-To compile PawnStar using `g++`, on linux run the following command:
+3. Configure and build the project:
 
 ```sh
-g++ -I external/chess-library/include ./src/main.cpp ./src/engine.cpp -o main.out
+cmake ..
+cmake --build .
 ```
 
-Replace `src/main.cpp` with the actual source file containing your `main` function.
+The executable will be created in the `build` directory.
 
 ## Running the Engine
 
-After compilation, you can run the engine with:
+After building, you can run the engine from the build directory:
 
 ```sh
-./pawnstar.out
+./pawnstar
 ```
 
 ## Future Plans
