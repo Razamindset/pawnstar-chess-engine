@@ -119,11 +119,13 @@ int Engine::kingEndgameScore(const Board& board, Color us, Color op) {
   return score;
 }
 
+int Engine::evaluatePawnStructure(const Board& board) { return 0; }
+
+int Engine::evaluateRookFiles(const Board& board) { return 0; }
+
 int Engine::evaluatePosition(const Board& board) {
   if (isGameOver(board)) {
     if (getGameOverReason(board) == GameResultReason::CHECKMATE) {
-      // return (board.sideToMove() == Color::WHITE) ? -MATE_SCORE : MATE_SCORE;
-      // origional should be this but since we flip in negamax then:-
       return (board.sideToMove() == Color::WHITE) ? MATE_SCORE : -MATE_SCORE;
     }
     return 0;
@@ -180,21 +182,36 @@ int Engine::evaluatePosition(const Board& board) {
 
     eval += (piece.color() == Color::WHITE) ? squareValue : -squareValue;
   }
+
+  //* If it is an endgame then we want the opponent king on specific squares
   if (isEndgame) {
     eval += kingEndgameScore(board, Color::WHITE, Color::BLACK) -
             kingEndgameScore(board, Color::BLACK, Color::WHITE);
   }
+
+  //* Lets try to add some bishop pair perks
+  int whiteBishopCount = board.pieces(PieceType::BISHOP, Color::WHITE).count();
+  int blackBishopCount = board.pieces(PieceType::BISHOP, Color::BLACK).count();
+  if (whiteBishopCount == 2) {
+    eval += 50;
+  }
+  if (blackBishopCount == 2) {
+    eval -= 50;
+  }
+
+  // Positional considerations
+  eval += evaluatePawnStructure(board);
 
   // Convert to side-to-move perspective for negamax
   return (board.sideToMove() == Color::WHITE) ? eval : -eval;
 }
 
 int Engine::searchAllCaptures(int alpha, int beta) {
-  // Quiescence search: When we reach the evaluation depth, we extend the search
-  // to explore all possible captures until we reach a quiet position (no more
-  // captures). This helps avoid the horizon effect—where a normal search might
-  // stop too early and miss tactical sequences (e.g., winning a pawn but then
-  // losing a queen on the next move).
+  // Quiescence search: When we reach the evaluation depth, we extend the
+  // search to explore all possible captures until we reach a quiet position
+  // (no more captures). This helps avoid the horizon effect—where a normal
+  // search might stop too early and miss tactical sequences (e.g., winning a
+  // pawn but then losing a queen on the next move).
 
   positionsSearched++;
   int evaluation = evaluatePosition(board);
@@ -216,9 +233,9 @@ int Engine::searchAllCaptures(int alpha, int beta) {
       continue;  // Only consider captures in quiescence search.
 
     // The following line is really necessary. I donot know if it is the best
-    // thing but it works. What we do is only consider capturing moves of higher
-    // value with lower value pieces. This brings down our search time from 30s
-    // to 6-7s
+    // thing but it works. What we do is only consider capturing moves of
+    // higher value with lower value pieces. This brings down our search time
+    // from 30s to 6-7s
     Piece attacker = board.at(move.from());
     Piece victim = board.at(move.to());
 
@@ -233,14 +250,15 @@ int Engine::searchAllCaptures(int alpha, int beta) {
 
   makeMove:
     board.makeMove(move);
-    // Negamax with alpha-beta pruning: The roles of alpha and beta are swapped
-    // because each layer alternates between maximizing and minimizing.
+    // Negamax with alpha-beta pruning: The roles of alpha and beta are
+    // swapped because each layer alternates between maximizing and
+    // minimizing.
     int score = -searchAllCaptures(-beta, -alpha);
     board.unmakeMove(move);
 
     // Beta cutoff: If we find a move better than beta for the maximizing
-    // player, the minimizing player will never allow this position, so we prune
-    // the search.
+    // player, the minimizing player will never allow this position, so we
+    // prune the search.
     if (score >= beta) {
       return beta;
     }
@@ -255,39 +273,39 @@ int Engine::searchAllCaptures(int alpha, int beta) {
 int Engine::negaMax(int depth, int alpha, int beta) {
   // In a simple minimax algorithm we wiil evaluate each position and
   // eventually after evaluting all posssible senarios we get a best move. We
-  // We assume that both players play optimally and always choose the best move
-  // available to them. For example lets say
+  // We assume that both players play optimally and always choose the best
+  // move available to them. For example lets say
   // 1. white plays a move
   // 2. black responds to it
   // 3. and then white responds it.
-  // At the lowest level after white responds to it we evalute the position then
-  // eval score is given to each of whites moves(at lowest point). White will
-  // choose its best move based on evaluations and give it to black. All the
-  // middle nodes will recieve a best move from the lower nodes.
-  // From all the data middlelayer got from lower layer black now will know what
-  // move is most favorable for it to that white can respond and black gets a
-  // godd eval score so it will choose that and send it to the top layer. Now
-  // white on the top can see and compare all the moves that black can respond
-  // with and an evalution score for each of those moves. White chooses the move
+  // At the lowest level after white responds to it we evalute the position
+  // then eval score is given to each of whites moves(at lowest point). White
+  // will choose its best move based on evaluations and give it to black. All
+  // the middle nodes will recieve a best move from the lower nodes. From all
+  // the data middlelayer got from lower layer black now will know what move
+  // is most favorable for it to that white can respond and black gets a godd
+  // eval score so it will choose that and send it to the top layer. Now white
+  // on the top can see and compare all the moves that black can respond with
+  // and an evalution score for each of those moves. White chooses the move
   // from the legal moves which results in a postion that most favors white
   // comparitive to other moves it can make.
 
-  // Before explaining the next step one thing should be explained. At initially
-  // we say that the worst possible evalution for white is -infinity meaning a
-  // mate for black and opposite for black(+ive infinity). We do that becuase we
-  // are looking for any move better that results better than a mate for the
-  // opponent. For example it is white to move we come accross a move that
-  // evalutes to -3 means black is better now but -3 is a better
-  // result for white than -ive infinity means black has mate. So after looping
-  // through all the possible moves and comparing them we will have the move
-  // that has the best evalution form all the legal moves and tries to get the
-  // best possible score. The opposite goes if its black to move. Black starts
-  // its expectation from +ive infinity so it wants any move that evaluates to
-  // less than that. By looping over black will get the best possible move from
-  // the set of legal moves. For this example we can say that black is
-  // minimizing player and white is maximizing player as white trying to
-  // maximize the score and black trying to minimize the score. Hence the name:
-  // MINMAX
+  // Before explaining the next step one thing should be explained. At
+  // initially we say that the worst possible evalution for white is -infinity
+  // meaning a mate for black and opposite for black(+ive infinity). We do
+  // that becuase we are looking for any move better that results better than
+  // a mate for the opponent. For example it is white to move we come accross
+  // a move that evalutes to -3 means black is better now but -3 is a better
+  // result for white than -ive infinity means black has mate. So after
+  // looping through all the possible moves and comparing them we will have
+  // the move that has the best evalution form all the legal moves and tries
+  // to get the best possible score. The opposite goes if its black to move.
+  // Black starts its expectation from +ive infinity so it wants any move that
+  // evaluates to less than that. By looping over black will get the best
+  // possible move from the set of legal moves. For this example we can say
+  // that black is minimizing player and white is maximizing player as white
+  // trying to maximize the score and black trying to minimize the score.
+  // Hence the name: MINMAX
 
   //* The saviors Alpha and beta:
   // This seems troubling at start but I hope this example will clear it
@@ -310,16 +328,21 @@ int Engine::negaMax(int depth, int alpha, int beta) {
   //* As in the middle layer black will try to choose the worst possible
   //* move for white obviously in favor of black. Say the first move is worse
   //* than alpha any other move that black will select will be worse than
-  //* the first move. So as a whole any move that branch produces for black that
+  //* the first move. So as a whole any move that branch produces for black
+  // that
   //* may reach the top layer will never be selected because white will have a
   //* better move at alpha evaluation. So why not just ignore them all
   //* moves!
 
-  //* The opposite now goes for the beta lets say at the some branch where it is
-  //* white to move or mX-player to move. Beta needs to be in -ive side or less
+  //* The opposite now goes for the beta lets say at the some branch where it
+  // is
+  //* white to move or mX-player to move. Beta needs to be in -ive side or
+  // less
   //* than alpha. We know that the best move for black
-  //* is of beta evaluation. The above layer of black knows the beta. Say first
-  //* eval of first move is greater than beta. Any move choosen from this layer
+  //* is of beta evaluation. The above layer of black knows the beta. Say
+  // first
+  //* eval of first move is greater than beta. Any move choosen from this
+  // layer
   //* will will be of more value or equal value to that of first move and more
   //* value than beta. So at the end of the day when all the branches will be
   //* resolved beta will be choosen so our seach at this index does not matter
@@ -349,20 +372,21 @@ int Engine::negaMax(int depth, int alpha, int beta) {
   //       │         │            │         │
   //       4         -2            3         5
   //* So at the base the eavluation function gives as say +4 after d5 so we
-  // neagate and give it to black. From those two black calculates the best move
-  // as -4 and passes it up. Same happens at the other side and we get -5. Now
-  // we again negate the values so they become +5 and +4. If you observe what we
-  // really did was cleverly we got the best moves or best evalution from the
-  // bottom layer to the top layer. and the same results with less code.
+  // neagate and give it to black. From those two black calculates the best
+  // move as -4 and passes it up. Same happens at the other side and we get
+  // -5. Now we again negate the values so they become +5 and +4. If you
+  // observe what we really did was cleverly we got the best moves or best
+  // evalution from the bottom layer to the top layer. and the same results
+  // with less code.
   //* Now we can also apply alpha beta pruning here. Say alpha is the best for
   // white so far. In branch two last layer when its black to move we find a
   // move for black that is less in evalution than alpha. So we can stop
-  // exploration at this branch and prune it. No that alpha and beta values are
-  // swapped and flipped at each recursion. As we use only one value that is
-  // alpha so when it is other player to move we swap alpha with beta as that
-  // player will also act as minimizing player and neagate the value as the
-  // evaluations are also negated. In this was each player at recursion acts as
-  // maximizing player reducing the amoun tof code required
+  // exploration at this branch and prune it. No that alpha and beta values
+  // are swapped and flipped at each recursion. As we use only one value that
+  // is alpha so when it is other player to move we swap alpha with beta as
+  // that player will also act as minimizing player and neagate the value as
+  // the evaluations are also negated. In this was each player at recursion
+  // acts as maximizing player reducing the amoun tof code required
 
   //* I hope it explains my thought process because sometimes chat gpt or docs
   //* use fancy words that are harder to visualize or understand
@@ -455,11 +479,12 @@ std::string Engine::getBestMove(int depth) {
     }
   }
 
-  // We always consider the player to be maximizing player so the evalution will
-  // always be in +ive even when black to move. We have handled the correct
-  // evalution for mate but for simple moves we cannot modify the eval value
-  // based on side to move as it will effect the next decission. So when we need
-  // the eval and it is not a mate we just put a negative sign for the black
+  // We always consider the player to be maximizing player so the evalution
+  // will always be in +ive even when black to move. We have handled the
+  // correct evalution for mate but for simple moves we cannot modify the eval
+  // value based on side to move as it will effect the next decission. So when
+  // we need the eval and it is not a mate we just put a negative sign for the
+  // black
   if (!isGameOver(board) && board.sideToMove() == Color::WHITE) {
     std::cout << "Evaluation: " << bestScore << "\n";
   } else if (!isGameOver(board)) {

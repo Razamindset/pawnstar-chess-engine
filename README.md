@@ -54,6 +54,7 @@ Currently implemented:
 
 Under development:
 
+- [ ] There is still some bug with the evaluation that needs to be identified
 - [ ] Advanced evaluation features
 - [ ] Improved move ordering
 - [ ] Time management

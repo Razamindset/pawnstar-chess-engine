@@ -1,29 +1,22 @@
+#include <iostream>
+
 #include "./game-recorder/pgn-recorder.hpp"
 
 int main() {
-  // Initialize engines
-  Engine whiteEngine;
-  Engine blackEngine;
-  whiteEngine.initializeEngine();
-  blackEngine.initializeEngine();
+  Engine engine;
+  std::string fen;
 
-  // Create game recorder
-  GameRecorder recorder(whiteEngine, blackEngine);
+  while (true) {
+    std::cout << "Enter FEN (or type 'exit' to quit): ";
+    std::getline(std::cin, fen);
 
-  // Set up metadata
-  GameMetadata meta;
-  meta.event = "Test Position";
-  meta.searchDepth = 4;
-  meta.startingFen = "3K4/3P4/8/8/8/8/3qk3/8 w - - 0 1";
+    if (fen == "exit") break;
 
-  // Configure the recorder
-  recorder.setMetadata(meta);
+    engine.setPosition(fen);
+    std::string bestMove = engine.getBestMove(6);
 
-  // Play the game
-  recorder.playGame();
-
-  // Save the PGN
-  recorder.savePGN("test_game.pgn");
+    std::cout << "Best Move: " << bestMove << "\n";
+  }
 
   return 0;
 }

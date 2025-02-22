@@ -4,7 +4,7 @@
 #include <string>
 
 #include "../chess-library/include/chess.hpp"
-#include "piece_values.hpp"
+#include "./utils/piece_values.hpp"
 
 using namespace chess;
 
@@ -43,6 +43,8 @@ class Engine {
   int searchAllCaptures(int alpha, int beta);
   int getPieceValue(Piece piece);
   int kingEndgameScore(const Board& board, Color us, Color op);
+  int evaluatePawnStructure(const Board& board);
+  int evaluateRookFiles(const Board& board);
   int manhattanDistance(Square sq1, Square sq2) {
     int file1 = sq1.file();
     int rank1 = sq1.rank();
