@@ -14,12 +14,17 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(SOURCES
     src/main.cpp
     src/engine/engine.cpp
+    src/engine/search.cpp
+    src/engine/eval.cpp
+    src/engine/utils.cpp
 )
 
 # Define header files
 set(HEADERS
     src/engine/engine.hpp
-    src/engine/piece_values.hpp
+    src/engine/utils.hpp
+    src/engine/eval.hpp
+    src/engine/search.hpp
     src/chess-library/include/chess.hpp
 )
 

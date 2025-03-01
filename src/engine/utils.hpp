@@ -1,5 +1,9 @@
-#ifndef PIECE_VALUES_HPP
-#define PIECE_VALUES_HPP
+#ifndef UTILS_HPP
+#define UTILS_HPP
+
+#include "../chess-library/include/chess.hpp"
+
+using namespace chess;
 
 constexpr int MATE_SCORE = 100000;
 
@@ -51,5 +55,26 @@ constexpr int KING_ENDGAME_MAP[64] = {
     -10, 20,  40,  50, 50, 40,  20,  -10, 0,   30,  50,  60, 60, 50,  30,  0,
     0,   30,  50,  60, 60, 50,  30,  0,   -10, 20,  40,  50, 50, 40,  20,  -10,
     -30, -10, 20,  30, 30, 20,  -10, -30, -50, -30, -10, 0,  0,  -10, -30, -50};
+
+constexpr int MARGIN = 50;
+
+constexpr int mirrorIndex(int sq) {
+  return sq ^ 56;  // Flips the rank (0-7 ↔ 7-0) while keeping the file the same
+}
+
+// Utility functions for distance calculations
+inline int manhattanDistance(Square sq1, Square sq2) {
+  int file1 = sq1.file();
+  int rank1 = sq1.rank();
+  int file2 = sq2.file();
+  int rank2 = sq2.rank();
+
+  return abs(file1 - file2) + abs(rank1 - rank2);
+}
+
+int getPieceValue(Piece piece);
+
+GameResultReason getGameOverReason(const Board& board);
+bool isGameOver(const Board& board);
 
 #endif
