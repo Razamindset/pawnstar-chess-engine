@@ -21,8 +21,6 @@ set(HEADERS
     src/engine/engine.hpp
     src/engine/piece_values.hpp
     src/chess-library/include/chess.hpp
-    src/game-recorder/game-metadata.hpp
-    src/game-recorder/pgn-recorder.hpp
 )
 
 # Create executable

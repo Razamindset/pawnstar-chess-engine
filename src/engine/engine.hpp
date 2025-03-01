@@ -4,7 +4,7 @@
 #include <string>
 
 #include "../chess-library/include/chess.hpp"
-#include "./utils/piece_values.hpp"
+#include "piece_values.hpp"
 
 using namespace chess;
 

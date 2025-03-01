@@ -1,22 +1,23 @@
 #include <iostream>
 
-#include "./game-recorder/pgn-recorder.hpp"
+#include "./engine/engine.hpp"
 
 int main() {
   Engine engine;
-  std::string fen;
+  engine.initializeEngine();
 
-  while (true) {
-    std::cout << "Enter FEN (or type 'exit' to quit): ";
-    std::getline(std::cin, fen);
+  // Example position (FEN for starting position)
+  std::string fen =
+      "rnbqkb1r/pppp1ppp/4pn2/8/2B1P3/8/PPPP1PPP/RNBQK1NR w KQkq - 2 3";
+  engine.setPosition(fen);
 
-    if (fen == "exit") break;
+  std::cout << "Current Position:\n";
+  engine.printBoard();
 
-    engine.setPosition(fen);
-    std::string bestMove = engine.getBestMove(6);
+  int searchDepth = 4;
+  std::string bestMove = engine.getBestMove(searchDepth);
 
-    std::cout << "Best Move: " << bestMove << "\n";
-  }
+  std::cout << "Best Move: " << bestMove << std::endl;
 
   return 0;
 }
