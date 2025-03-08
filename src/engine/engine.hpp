@@ -9,9 +9,34 @@
 
 using namespace chess;
 
+// Transposition table entry types
+enum class TTEntryType {
+  EXACT,  // Exact score for the position
+  LOWER,  // Lower bound (alpha cutoff)
+  UPPER   // Upper bound (beta cutoff)
+};
+
+// Structure for transposition table entries
+struct TTEntry {
+  uint64_t hash;     // Zobrist hash of the position
+  int score;         // Evaluation score
+  int depth;         // Depth at which the position was evaluated
+  TTEntryType type;  // Type of entry
+  Move bestMove;     // Best move found for this position
+};
+
 class Engine {
  private:
   Board board;
+
+  // transpostion table realated
+  std::unordered_map<uint64_t, TTEntry> transpositionTable;
+  int ttHits = 0;
+  void clearTranspositionTable();
+  bool probeTT(uint64_t hash, int depth, int& score, int alpha, int beta,
+               Move& bestMove);
+  void storeTT(uint64_t hash, int depth, int score, TTEntryType type,
+               Move bestMove);
 
   // Pieces related
   int getPieceValue(Piece piece);
@@ -43,6 +68,17 @@ class Engine {
   void setPosition(const std::string& fen);
   void printBoard();
   std::string getBestMove(int depth);
+
+  // Tts size
+  size_t getTableSize() const { return transpositionTable.size(); }
+
+  /* Get table size in Kilobytes */
+  size_t getTableMemoryUsage() const {
+    // Size of each entry + size of the key (array) * number of entries
+    size_t size = (sizeof(TTEntry) + sizeof(std::array<unsigned char, 24>)) *
+                  transpositionTable.size();
+    return size / 1024;
+  }
 
   int positionsSearched = 0;
 

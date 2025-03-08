@@ -70,8 +70,8 @@ int Engine::evaluateRookFiles(const Board& board) {
 /* The side which has more choices is generally better */
 int Engine::evaluateMobility(const Board& board) {
   int eval = 0;
-  Color us = board.sideToMove();
-  Color op = us == Color::WHITE ? Color::BLACK : Color::WHITE;
+  // Color us = board.sideToMove();
+  // Color op = us == Color::WHITE ? Color::BLACK : Color::WHITE;
 
   // Create temporary board to generate moves
   Board tempBoard = board;

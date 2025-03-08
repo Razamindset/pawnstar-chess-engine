@@ -16,6 +16,7 @@ set(SOURCES
     src/engine/engine.cpp
     src/engine/search.cpp
     src/engine/eval.cpp
+    src/engine/tts.cpp
 )
 
 # Define header files

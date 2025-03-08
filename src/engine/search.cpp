@@ -45,8 +45,23 @@ void Engine::orderMoves(Movelist& moves) {
 int Engine::negaMax(int depth, int alpha, int beta) {
   positionsSearched++;
 
-  if (isGameOver() || depth == 0) {
+  if (isGameOver()) {
     return evaluatePosition(board);
+  }
+
+  // Check the tts for matches
+  uint64_t hash = board.hash();
+  int ttScore = 0;
+  Move ttMove = Move::NULL_MOVE;
+
+  if (probeTT(hash, depth, ttScore, alpha, beta, ttMove)) {
+    return ttScore;
+  }
+
+  if (depth <= 0) {
+    int eval = evaluatePosition(board);
+    storeTT(hash, 0, eval, TTEntryType::EXACT, Move::NULL_MOVE);
+    return eval;
   }
 
   Movelist moves;
@@ -56,9 +71,22 @@ int Engine::negaMax(int depth, int alpha, int beta) {
     return evaluatePosition(board);
   }
 
-  orderMoves(moves);
+  // If we got a move from TT, try that first
+  if (ttMove != Move::NULL_MOVE) {
+    // Check for safety if the tt move is in the list
+    for (size_t i = 0; i < moves.size(); i++) {
+      if (moves[i] == ttMove) {
+        std::swap(moves[0], moves[i]);
+        break;
+      }
+    }
+  } else {
+    orderMoves(moves);
+  }
 
   int maxScore = -MATE_SCORE;  // Should be defined as a very negative number
+  Move bestMove = Move::NULL_MOVE;
+  TTEntryType entryType = TTEntryType::UPPER;
 
   for (const auto& move : moves) {
     board.makeMove(move);
@@ -71,11 +99,17 @@ int Engine::negaMax(int depth, int alpha, int beta) {
       maxScore = score;
     }
 
-    alpha = std::max(alpha, score);
-    if (alpha >= beta) {
-      break;  // Beta cutoff
+    if (score > alpha) {
+      alpha = score;
+      entryType = TTEntryType::EXACT;
+
+      if (alpha >= beta) {
+        entryType = TTEntryType::LOWER;
+        break;  // Beta cutoff
+      }
     }
   }
+  storeTT(hash, depth, maxScore, entryType, bestMove);
 
   return maxScore;
 }
