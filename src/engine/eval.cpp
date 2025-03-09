@@ -115,10 +115,12 @@ int Engine::kingEndgameScore(const Board& board, Color us, Color op) {
   return score;
 }
 
-int Engine::evaluatePosition(const Board& board) {
+int Engine::evaluatePosition(const Board& board, int ply = 0) {
   if (isGameOver()) {
     if (getGameOverReason() == GameResultReason::CHECKMATE) {
-      return (board.sideToMove() == Color::WHITE) ? MATE_SCORE : -MATE_SCORE;
+      // Also flip the eval as it is negamax
+      return (board.sideToMove() == Color::WHITE) ? -MATE_SCORE + ply
+                                                  : MATE_SCORE - ply;
     }
     return 0;
   }

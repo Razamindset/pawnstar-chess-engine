@@ -45,7 +45,6 @@ class UCIAdapter {
     } else if (token == "quit") {
       exit(0);
     } else if (token == "ucinewgame") {
-      // Reset any game-specific data in your engine
       engine->initilizeEngine();
     } else if (token == "setoption") {
       handleSetOption(iss);
@@ -53,8 +52,8 @@ class UCIAdapter {
   }
 
   void handleUCI() {
-    std::cout << "id name YourEngineName" << std::endl;
-    std::cout << "id author YourName" << std::endl;
+    std::cout << "id name Pawnstar" << std::endl;
+    std::cout << "id author Razamindset" << std::endl;
 
     // Output available options if any
     // std::cout << "option name Hash type spin default 64 min 1 max 1024" <<

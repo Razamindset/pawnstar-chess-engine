@@ -12,6 +12,7 @@ bool Engine::probeTT(uint64_t hash, int depth, int& score, int alpha, int beta,
     return false;
   }
   const TTEntry& entry = it->second;
+  ttHits++;
 
   if (entry.depth >= depth) {
     score = entry.score;

@@ -42,11 +42,74 @@ void Engine::orderMoves(Movelist& moves) {
   }
 }
 
+/* Extend the search to explore tactical possibilites */
+int Engine::extendedSearch(int alpha, int beta, int depth) {
+  // Todo add tts to this search too
+  positionsSearched++;
+
+  if (depth <= 0) return evaluatePosition(board, 0);
+
+  bool inCheck = board.inCheck();
+
+  int evaluation = evaluatePosition(board, 0);
+
+  // Alpha-beta pruning
+  if (!inCheck && evaluation >= beta) return beta;
+
+  // If not in check and eval is better than our current alpha, update
+  // alpha
+  if (!inCheck) alpha = std::max(evaluation, alpha);
+
+  Movelist moves;
+  movegen::legalmoves(moves, board);
+
+  orderMoves(moves);
+
+  for (const auto& move : moves) {
+    //! Following ifs will ensure that we skip bad moves
+    // If not in check, we consider captures and promotions
+    if (!inCheck && !board.isCapture(move) && move.typeOf() != Move::PROMOTION)
+      continue;
+
+    // If we're considering captures and not in check, perform additional
+    // pruning
+    if (!inCheck && board.isCapture(move)) {
+      Piece attacker = board.at(move.from());
+      Piece victim = board.at(move.to());
+
+      // Delta pruning - if capturing the most valuable piece wouldn't improve
+      // alpha
+      const int FUTILITY_MARGIN = 200;
+      if (evaluation + getPieceValue(victim) + FUTILITY_MARGIN < alpha)
+        continue;
+
+      // Skip captures that lose material (simplified SEE check)
+      if (getPieceValue(attacker) > getPieceValue(victim) + 50) {
+        // Exception for pawn promotions, which are always worth considering
+        if (move.typeOf() != Move::PROMOTION || attacker.type() != PAWN)
+          continue;
+      }
+    }
+
+    board.makeMove(move);
+    int score = -extendedSearch(-beta, -alpha, depth - 1);
+    board.unmakeMove(move);
+
+    // Beta cutoff
+    if (score >= beta) return beta;
+
+    // Update alpha
+    alpha = std::max(alpha, score);
+  }
+
+  return alpha;
+}
+
 int Engine::negaMax(int depth, int alpha, int beta) {
   positionsSearched++;
 
   if (isGameOver()) {
-    return evaluatePosition(board);
+    return evaluatePosition(board, 0);
   }
 
   // Check the tts for matches
@@ -59,7 +122,7 @@ int Engine::negaMax(int depth, int alpha, int beta) {
   }
 
   if (depth <= 0) {
-    int eval = evaluatePosition(board);
+    int eval = extendedSearch(alpha, beta, 8);
     storeTT(hash, 0, eval, TTEntryType::EXACT, Move::NULL_MOVE);
     return eval;
   }
@@ -68,7 +131,7 @@ int Engine::negaMax(int depth, int alpha, int beta) {
   movegen::legalmoves(moves, board);
 
   if (moves.empty()) {
-    return evaluatePosition(board);
+    return evaluatePosition(board, 0);
   }
 
   // If we got a move from TT, try that first
@@ -97,11 +160,13 @@ int Engine::negaMax(int depth, int alpha, int beta) {
 
     if (score > maxScore) {
       maxScore = score;
+      bestMove = move;
     }
 
     if (score > alpha) {
       alpha = score;
       entryType = TTEntryType::EXACT;
+      bestMove = move;
 
       if (alpha >= beta) {
         entryType = TTEntryType::LOWER;
@@ -154,6 +219,8 @@ std::string Engine::getBestMove(int depth) {
       bestMove = move;
     }
   }
+
+  std::cout << "Hits in tt: " << ttHits << "\n";
 
   return uci::moveToUci(bestMove);
 }

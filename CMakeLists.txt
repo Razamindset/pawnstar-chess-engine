@@ -12,7 +12,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
 # Define source files
 set(SOURCES
-    src/main.cpp
+    src/play-self.cpp
     src/engine/engine.cpp
     src/engine/search.cpp
     src/engine/eval.cpp

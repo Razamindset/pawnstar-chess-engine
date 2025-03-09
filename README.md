@@ -1,6 +1,6 @@
-# PawnStar Chess Engine
+# PawnStar UCI Chess Engine
 
-PawnStar is a chess engine written in C++ that uses the [chess-library](https://github.com/Disservin/chess-library) for board operations and move validation.
+PawnStar is a UCI chess engine written in C++ that uses the [chess-library](https://github.com/Disservin/chess-library) for board operations and move validation.
 
 ## Building the Project
 

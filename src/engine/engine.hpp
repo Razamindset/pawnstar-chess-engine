@@ -43,10 +43,11 @@ class Engine {
 
   // Search related
   int negaMax(int depth, int alpha, int beta);
+  int extendedSearch(int alpha, int beta, int depth);
   void orderMoves(Movelist& moves);
 
   // Evaluation related fuctions
-  int evaluatePosition(const Board& board);
+  int evaluatePosition(const Board& board, int ply);
   int evaluateMaterial(const Board& board);
   int evaluatePieceSquareTables(const Board& board, bool isEndGame);
   int evaluatePawnStructure(const Board& board);  // Todo
