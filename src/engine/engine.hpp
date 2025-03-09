@@ -67,6 +67,8 @@ class Engine {
  public:
   void setPosition(const std::string& fen);
   void printBoard();
+  void initilizeEngine();
+
   std::string getBestMove(int depth);
 
   // Tts size
@@ -79,6 +81,9 @@ class Engine {
                   transpositionTable.size();
     return size / 1024;
   }
+
+  // Move making
+  void makeMove(std::string move);
 
   int positionsSearched = 0;
 
