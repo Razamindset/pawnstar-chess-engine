@@ -43,15 +43,15 @@ void Engine::orderMoves(Movelist& moves) {
 }
 
 /* Extend the search to explore tactical possibilites */
-int Engine::extendedSearch(int alpha, int beta, int depth) {
+int Engine::extendedSearch(int alpha, int beta, int depth, int ply) {
   // Todo add tts to this search too
   positionsSearched++;
 
-  if (depth <= 0) return evaluatePosition(board, 0);
+  if (depth <= 0) return evaluatePosition(board, ply);
 
   bool inCheck = board.inCheck();
 
-  int evaluation = evaluatePosition(board, 0);
+  int evaluation = evaluatePosition(board, ply);
 
   // Alpha-beta pruning
   if (!inCheck && evaluation >= beta) return beta;
@@ -62,6 +62,14 @@ int Engine::extendedSearch(int alpha, int beta, int depth) {
 
   Movelist moves;
   movegen::legalmoves(moves, board);
+
+  if (moves.empty()) {
+    if (inCheck) {
+      return -MATE_SCORE + ply;
+    } else {
+      return 0;
+    }
+  }
 
   orderMoves(moves);
 
@@ -84,7 +92,7 @@ int Engine::extendedSearch(int alpha, int beta, int depth) {
         continue;
 
       // Skip captures that lose material (simplified SEE check)
-      if (getPieceValue(attacker) > getPieceValue(victim) + 50) {
+      if (getPieceValue(attacker) > getPieceValue(victim)) {
         // Exception for pawn promotions, which are always worth considering
         if (move.typeOf() != Move::PROMOTION || attacker.type() != PAWN)
           continue;
@@ -92,7 +100,7 @@ int Engine::extendedSearch(int alpha, int beta, int depth) {
     }
 
     board.makeMove(move);
-    int score = -extendedSearch(-beta, -alpha, depth - 1);
+    int score = -extendedSearch(-beta, -alpha, depth - 1, ply + 1);
     board.unmakeMove(move);
 
     // Beta cutoff
@@ -105,11 +113,12 @@ int Engine::extendedSearch(int alpha, int beta, int depth) {
   return alpha;
 }
 
-int Engine::negaMax(int depth, int alpha, int beta) {
+int Engine::negaMax(int depth, int alpha, int beta, int ply) {
   positionsSearched++;
+  ply++;
 
   if (isGameOver()) {
-    return evaluatePosition(board, 0);
+    return evaluatePosition(board, ply);
   }
 
   // Check the tts for matches
@@ -122,7 +131,7 @@ int Engine::negaMax(int depth, int alpha, int beta) {
   }
 
   if (depth <= 0) {
-    int eval = extendedSearch(alpha, beta, 8);
+    int eval = extendedSearch(alpha, beta, 8, ply);
     storeTT(hash, 0, eval, TTEntryType::EXACT, Move::NULL_MOVE);
     return eval;
   }
@@ -131,7 +140,7 @@ int Engine::negaMax(int depth, int alpha, int beta) {
   movegen::legalmoves(moves, board);
 
   if (moves.empty()) {
-    return evaluatePosition(board, 0);
+    return evaluatePosition(board, ply);
   }
 
   // If we got a move from TT, try that first
@@ -153,7 +162,7 @@ int Engine::negaMax(int depth, int alpha, int beta) {
 
   for (const auto& move : moves) {
     board.makeMove(move);
-    int score = -negaMax(depth - 1, -beta, -alpha);
+    int score = -negaMax(depth - 1, -beta, -alpha, ply);
 
     // std::cout << "Move: " << uci::moveToUci(move) << " " << score << "\n";
     board.unmakeMove(move);
@@ -211,7 +220,7 @@ std::string Engine::getBestMove(int depth) {
       break;
     }
 
-    int score = -negaMax(depth - 1, -MATE_SCORE, MATE_SCORE);
+    int score = -negaMax(depth - 1, -MATE_SCORE, MATE_SCORE, 1);
     board.unmakeMove(move);
 
     if (score > bestScore) {
@@ -220,7 +229,19 @@ std::string Engine::getBestMove(int depth) {
     }
   }
 
-  std::cout << "Hits in tt: " << ttHits << "\n";
+  // std::cout << "Hits in tt: " << ttHits << "\n";
+
+  // ! Fix this uci format mate distance reporting
+  // if (std::abs(bestScore) > MATE_SCORE - 100) {  // It's a mate score
+  //   int mateDistance;
+
+  //   mateDistance = (MATE_SCORE - bestScore + 1) / 2;
+  //   std::cout << "info score mate " << mateDistance << "\n";
+
+  // } else {
+  //   // Regular centipawn score
+  //   std::cout << "info score cp " << bestScore << "\n";
+  // }
 
   return uci::moveToUci(bestMove);
 }
