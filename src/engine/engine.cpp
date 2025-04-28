@@ -28,3 +28,11 @@ int Engine::getPieceValue(Piece piece) {
 void Engine::makeMove(std::string move) {
   board.makeMove(uci::uciToMove(board, move));
 }
+
+std::string Engine::moveToSan(const std::string& uciMove) {
+  if (isGameOver()) {
+    return "";
+  }
+  Move move = uci::uciToMove(board, uciMove);
+  return uci::moveToSan(board, move);
+}

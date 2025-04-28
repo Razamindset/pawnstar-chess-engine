@@ -5,7 +5,7 @@ void Engine::orderMoves(Movelist& moves) {
   scoredMoves.reserve(moves.size());
 
   for (const auto& move : moves) {
-    int score = -800;  // worst queen takes pawn
+    int score = 0;  // worst queen takes pawn
 
     // ! If we make n moves on the board for each reacursive call that is
     // computationally heavy If we skip this step the engine will still look
@@ -43,70 +43,70 @@ void Engine::orderMoves(Movelist& moves) {
 }
 
 /* Extend the search to explore tactical possibilites */
-int Engine::extendedSearch(int alpha, int beta, int depth, int ply) {
-  // Todo add tts to this search too
+int Engine::extendedSearch(int alpha, int beta, int ply) {
   positionsSearched++;
-
-  if (depth <= 0) return evaluatePosition(board, ply);
-
-  bool inCheck = board.inCheck();
-
+  ply++;
   int evaluation = evaluatePosition(board, ply);
 
-  // Alpha-beta pruning
-  if (!inCheck && evaluation >= beta) return beta;
+  // Alpha-beta pruning: If the evaluation is greater than or equal to beta,
+  // the minimizing player has found a move that the maximizing player would
+  // never allow. So, we prune this branch.
+  if (evaluation >= beta) return beta;
 
-  // If not in check and eval is better than our current alpha, update
-  // alpha
-  if (!inCheck) alpha = std::max(evaluation, alpha);
+  // Update alpha to track the best score found so far for the maximizing
+  // player.
+  alpha = std::max(evaluation, alpha);
 
   Movelist moves;
   movegen::legalmoves(moves, board);
 
   if (moves.empty()) {
-    if (inCheck) {
+    if (board.inCheck()) {
       return -MATE_SCORE + ply;
     } else {
       return 0;
     }
   }
 
-  orderMoves(moves);
-
   for (const auto& move : moves) {
-    //! Following ifs will ensure that we skip bad moves
-    // If not in check, we consider captures and promotions
-    if (!inCheck && !board.isCapture(move) && move.typeOf() != Move::PROMOTION)
-      continue;
+    board.makeMove(move);
+    bool inCheck = board.inCheck();
+    board.unmakeMove(move);
+    if (!board.isCapture(move) || !inCheck)
+      continue;  // Only consider captures in quiescence search.
 
-    // If we're considering captures and not in check, perform additional
-    // pruning
-    if (!inCheck && board.isCapture(move)) {
-      Piece attacker = board.at(move.from());
-      Piece victim = board.at(move.to());
+    // The following line is really necessary. I donot know if it is the best
+    // thing but it works. What we do is only consider capturing moves of
+    // higher value with lower value pieces. This brings down our search time
+    // from 30s to 6-7s
+    Piece attacker = board.at(move.from());
+    Piece victim = board.at(move.to());
 
-      // Delta pruning - if capturing the most valuable piece wouldn't improve
-      // alpha
-      const int FUTILITY_MARGIN = 200;
-      if (evaluation + getPieceValue(victim) + FUTILITY_MARGIN < alpha)
-        continue;
+    // Allow equal captures (like queen takes queen)
+    if (getPieceValue(attacker) > getPieceValue(victim) + 50) continue;
 
-      // Skip captures that lose material (simplified SEE check)
-      if (getPieceValue(attacker) > getPieceValue(victim)) {
-        // Exception for pawn promotions, which are always worth considering
-        if (move.typeOf() != Move::PROMOTION || attacker.type() != PAWN)
-          continue;
-      }
+    // Consider promoted pawns specially
+    if (move.typeOf() == Move::PROMOTION) {
+      // Always consider pawn captures that lead to promotion
+      if (attacker.type() == PAWN) goto makeMove;
     }
 
+  makeMove:
     board.makeMove(move);
-    int score = -extendedSearch(-beta, -alpha, depth - 1, ply + 1);
+    // Negamax with alpha-beta pruning: The roles of alpha and beta are
+    // swapped because each layer alternates between maximizing and
+    // minimizing.
+    int score = -extendedSearch(-beta, -alpha, ply);
     board.unmakeMove(move);
 
-    // Beta cutoff
-    if (score >= beta) return beta;
+    // Beta cutoff: If we find a move better than beta for the maximizing
+    // player, the minimizing player will never allow this position, so we
+    // prune the search.
+    if (score >= beta) {
+      return beta;
+    }
 
-    // Update alpha
+    // Update alpha to the best score found so far.
     alpha = std::max(alpha, score);
   }
 
@@ -131,8 +131,7 @@ int Engine::negaMax(int depth, int alpha, int beta, int ply) {
   }
 
   if (depth <= 0) {
-    int eval = extendedSearch(alpha, beta, 8, ply);
-    storeTT(hash, 0, eval, TTEntryType::EXACT, Move::NULL_MOVE);
+    int eval = extendedSearch(alpha, beta, ply);
     return eval;
   }
 
@@ -209,17 +208,6 @@ std::string Engine::getBestMove(int depth) {
   for (const auto& move : moves) {
     board.makeMove(move);
 
-    if (isGameOver() && getGameOverReason() == GameResultReason::CHECKMATE) {
-      if (board.sideToMove() == Color::WHITE) {
-        bestScore = -MATE_SCORE;
-        bestMove = move;
-      } else {
-        bestScore = MATE_SCORE;
-        bestMove = move;
-      }
-      break;
-    }
-
     int score = -negaMax(depth - 1, -MATE_SCORE, MATE_SCORE, 1);
     board.unmakeMove(move);
 
@@ -229,7 +217,7 @@ std::string Engine::getBestMove(int depth) {
     }
   }
 
-  // std::cout << "Hits in tt: " << ttHits << "\n";
+  std::cout << "Eval " << bestScore << "\n";
 
   // ! Fix this uci format mate distance reporting
   // if (std::abs(bestScore) > MATE_SCORE - 100) {  // It's a mate score

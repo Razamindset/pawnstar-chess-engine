@@ -118,11 +118,11 @@ int Engine::kingEndgameScore(const Board& board, Color us, Color op) {
 int Engine::evaluatePosition(const Board& board, int ply) {
   if (isGameOver()) {
     if (getGameOverReason() == GameResultReason::CHECKMATE) {
-      // Also flip the mate eval as it is negamax search
-      return (board.sideToMove() == Color::WHITE) ? -MATE_SCORE + ply
-                                                  : MATE_SCORE - ply;
+      // Return a mate score that's adjusted by the current ply depth
+      // This ensures closer mates are valued higher than distant ones
+      return -MATE_SCORE + ply;  // The side to move is checkmated
     }
-    return 0;
+    return 0;  // Draw
   }
 
   int eval = 0;

@@ -1,3 +1,5 @@
+#include <signal.h>
+
 #include <atomic>
 #include <chrono>
 #include <ctime>
@@ -9,6 +11,7 @@
 #include <vector>
 
 #include "./engine/engine.hpp"
+#include "chess-library/include/chess.hpp"  // Include the chess library
 
 // Configuration
 const int SEARCH_DEPTH = 4;  // Depth for engine search
@@ -16,84 +19,62 @@ const int MAX_MOVES = 200;   // Max moves before declaring draw
 const bool SAVE_PGN = true;  // Whether to save games as PGN
 const std::string PGN_FILE = "self_play_games.pgn";
 
-class MockUCI {
- private:
-  Engine engine;
-  std::string lastFen;
-  std::vector<std::string> moveHistory;
+// Global variables to handle crashes
+std::vector<std::string> g_currentSanMoves;
+std::string g_currentResult = "*";
+int g_currentGameNum = 0;
+bool g_gameInProgress = false;
 
- public:
-  MockUCI() { engine.initilizeEngine(); }
+// Signal handler for crashes
+void signalHandler(int signum) {
+  std::cout << "Signal " << signum
+            << " received. Saving current game state before exit..."
+            << std::endl;
 
-  std::string processCommand(const std::string& cmd) {
-    std::istringstream iss(cmd);
-    std::string token;
-    iss >> token;
+  if (g_gameInProgress && SAVE_PGN) {
+    std::ofstream pgnFile(PGN_FILE, std::ios::app);
+    if (pgnFile.is_open()) {
+      // Create PGN with incomplete game
+      std::stringstream pgn;
+      pgn << "[Event \"Self-play Game (Interrupted)\"]" << std::endl;
+      pgn << "[Site \"Local\"]" << std::endl;
 
-    if (token == "uci") {
-      return "id name Pawnstar\nid author Razamindset\nuciok";
-    } else if (token == "isready") {
-      return "readyok";
-    } else if (token == "position") {
-      handlePosition(iss);
-      return "";
-    } else if (token == "go") {
-      return "bestmove " + getBestMove();
-    } else if (token == "ucinewgame") {
-      engine.initilizeEngine();
-      moveHistory.clear();
-      return "";
-    } else {
-      return "";
+      // Get current date
+      auto now = std::chrono::system_clock::now();
+      std::time_t time = std::chrono::system_clock::to_time_t(now);
+      std::tm* timeinfo = std::localtime(&time);
+      char buffer[80];
+      std::strftime(buffer, 80, "%Y.%m.%d", timeinfo);
+
+      pgn << "[Date \"" << buffer << "\"]" << std::endl;
+      pgn << "[Round \"" << g_currentGameNum << "\"]" << std::endl;
+      pgn << "[White \"Pawnstar\"]" << std::endl;
+      pgn << "[Black \"Pawnstar\"]" << std::endl;
+      pgn << "[Result \"" << g_currentResult << "\"]" << std::endl << std::endl;
+
+      // Directly write the SAN moves we've been storing
+      for (size_t i = 0; i < g_currentSanMoves.size(); ++i) {
+        if (i % 2 == 0) {
+          pgn << (i / 2 + 1) << ". ";
+        }
+
+        pgn << g_currentSanMoves[i] << " ";
+
+        // Line break every 5 full moves
+        if (i % 10 == 9) {
+          pgn << std::endl;
+        }
+      }
+
+      pgn << g_currentResult << std::endl << std::endl;
+      pgnFile << pgn.str();
+      pgnFile.close();
+      std::cout << "Interrupted game saved to " << PGN_FILE << std::endl;
     }
   }
 
-  const std::vector<std::string>& getMoveHistory() const { return moveHistory; }
-
- private:
-  void handlePosition(std::istringstream& iss) {
-    std::string token;
-    iss >> token;
-
-    if (token == "startpos") {
-      lastFen = "rnbqkbnr/pppppppp/8/8/8/8/PPPPPPPP/RNBQKBNR w KQkq - 0 1";
-      engine.setPosition(lastFen);
-
-      // Process moves if any
-      iss >> token;
-      if (token == "moves") {
-        moveHistory.clear();
-        std::string move;
-        while (iss >> move) {
-          engine.makeMove(move);
-          moveHistory.push_back(move);
-        }
-      }
-    } else if (token == "fen") {
-      std::string fen;
-      // Collect all parts of the FEN string
-      for (int i = 0; i < 6; i++) {
-        iss >> token;
-        fen += token + " ";
-      }
-      lastFen = fen;
-      engine.setPosition(fen);
-
-      // Process moves if any
-      iss >> token;
-      if (token == "moves") {
-        moveHistory.clear();
-        std::string move;
-        while (iss >> move) {
-          engine.makeMove(move);
-          moveHistory.push_back(move);
-        }
-      }
-    }
-  }
-
-  std::string getBestMove() { return engine.getBestMove(SEARCH_DEPTH); }
-};
+  exit(signum);
+}
 
 // Helper functions for PGN generation
 std::string getCurrentDateTime() {
@@ -106,13 +87,7 @@ std::string getCurrentDateTime() {
   return std::string(buffer);
 }
 
-std::string uciToSan(const std::string& uciMove) {
-  // This is a simplified conversion - for proper SAN you'd need full board
-  // state
-  return uciMove;
-}
-
-std::string createPgn(const std::vector<std::string>& moves,
+std::string createPgn(const std::vector<std::string>& sanMoves,
                       const std::string& result) {
   std::stringstream pgn;
 
@@ -120,17 +95,17 @@ std::string createPgn(const std::vector<std::string>& moves,
   pgn << "[Event \"Self-play Game\"]" << std::endl;
   pgn << "[Site \"Local\"]" << std::endl;
   pgn << "[Date \"" << getCurrentDateTime() << "\"]" << std::endl;
-  pgn << "[Round \"1\"]" << std::endl;
+  pgn << "[Round \"" << g_currentGameNum << "\"]" << std::endl;
   pgn << "[White \"Pawnstar\"]" << std::endl;
   pgn << "[Black \"Pawnstar\"]" << std::endl;
   pgn << "[Result \"" << result << "\"]" << std::endl << std::endl;
 
-  // Moves in SAN format
-  for (size_t i = 0; i < moves.size(); ++i) {
+  // Write SAN moves directly
+  for (size_t i = 0; i < sanMoves.size(); ++i) {
     if (i % 2 == 0) {
       pgn << (i / 2 + 1) << ". ";
     }
-    pgn << uciToSan(moves[i]) << " ";
+    pgn << sanMoves[i] << " ";
 
     // Line break every 5 full moves
     if (i % 10 == 9) {
@@ -142,90 +117,107 @@ std::string createPgn(const std::vector<std::string>& moves,
   return pgn.str();
 }
 
-// Detect game end conditions
-bool isCheckmate(const std::string& bestMove, const Engine& engine) {
-  // In a real implementation, you would check the engine's state
-  // For now, we just consider no legal moves as checkmate if not stalemate
-  return bestMove.empty() || bestMove == "(none)";
-}
-
-bool isDraw(int moveCount, const std::vector<std::string>& moves) {
-  if (moveCount >= MAX_MOVES) return true;
-
-  // Check for threefold repetition (simplified)
-  // In a real implementation, you would check the actual positions
-
-  return false;
-}
-
 void playSelfGame(int gameNum) {
   std::cout << "=== Starting Game " << gameNum << " ===" << std::endl;
 
-  MockUCI engine;
+  // Update global game tracking
+  g_currentGameNum = gameNum;
+  g_currentSanMoves.clear();
+  g_currentResult = "*";
+  g_gameInProgress = true;
 
-  // Initialize game
-  engine.processCommand("ucinewgame");
-  engine.processCommand("position startpos");
+  // Initialize the engine
+  Engine engine;
+  engine.initilizeEngine();
 
-  std::vector<std::string> allMoves;
+  // Initialize the chess library board
+  chess::Board board;
+  std::vector<std::string> sanMoves;
   std::string result = "*";
+  int moveCount = 0;
 
-  // Play moves until game ends
-  for (int moveCount = 1; moveCount <= MAX_MOVES; ++moveCount) {
-    // Get current position with moves
-    std::stringstream posCmd;
-    posCmd << "position startpos";
-    if (!allMoves.empty()) {
-      posCmd << " moves";
-      for (const auto& move : allMoves) {
-        posCmd << " " << move;
+  try {
+    // Play game until conclusion
+    while (moveCount < MAX_MOVES) {
+      moveCount++;
+
+      // Get current FEN from chess library
+      std::string currentFen = board.getFen();
+
+      // Set the position in the engine
+      engine.setPosition(currentFen);
+
+      // Get best move from engine
+      std::string bestMove = engine.getBestMove(SEARCH_DEPTH);
+
+      // Check if game is over
+      if (bestMove.empty() || bestMove == "(none)") {
+        // Determine if checkmate or stalemate
+        bool isInCheck = board.inCheck();
+        if (isInCheck) {
+          // Checkmate
+          result = (moveCount % 2 == 1) ? "0-1" : "1-0";
+        } else {
+          // Stalemate
+          result = "1/2-1/2";
+        }
+        break;
+      }
+
+      Move bst = uci::uciToMove(board, bestMove);
+
+      // Convert UCI move to SAN using chess library
+      std::string sanMove = uci::moveToSan(board, bst);
+
+      std::cout << "Move " << moveCount << ": " << bestMove << " (" << sanMove
+                << ")" << std::endl;
+
+      // Make the move on the board
+      board.makeMove(bst);
+
+      // Store SAN move for PGN
+      sanMoves.push_back(sanMove);
+
+      // Update global tracking for crash handling
+      g_currentSanMoves = sanMoves;
+
+      // Check for draw conditions (simplified)
+      if (board.isHalfMoveDraw() || board.isInsufficientMaterial() ||
+          board.isRepetition() || moveCount >= MAX_MOVES) {
+        result = "1/2-1/2";
+        break;
       }
     }
-    engine.processCommand(posCmd.str());
-
-    // Get best move
-    std::string response =
-        engine.processCommand("go depth " + std::to_string(SEARCH_DEPTH));
-
-    // Extract move from "bestmove e2e4" format
-    std::string bestMove;
-    std::istringstream iss(response);
-    std::string token;
-    iss >> token >> bestMove;
-
-    std::cout << "Move " << moveCount << ": " << bestMove << std::endl;
-
-    // Check for game end
-    if (bestMove.empty() || bestMove == "(none)") {
-      // Game ended, determine whether checkmate or stalemate
-      result = (moveCount % 2 == 1) ? "0-1" : "1-0";  // Side to move lost
-      std::cout << "Game over: " << result << std::endl;
-      break;
-    }
-
-    // Check for draws
-    if (isDraw(moveCount, allMoves)) {
-      result = "1/2-1/2";
-      std::cout << "Game over: Draw" << std::endl;
-      break;
-    }
-
-    // Add move to history
-    allMoves.push_back(bestMove);
+  } catch (const std::exception& e) {
+    std::cerr << "Error during game: " << e.what() << std::endl;
+    result = "*";  // Mark as incomplete
   }
+
+  // Update final result for crash handler
+  g_currentResult = result;
+  std::cout << "Game over: " << result << std::endl;
 
   // Save game in PGN format if enabled
   if (SAVE_PGN) {
     std::ofstream pgnFile(PGN_FILE, std::ios::app);
     if (pgnFile.is_open()) {
-      pgnFile << createPgn(allMoves, result);
+      pgnFile << createPgn(sanMoves, result);
       pgnFile.close();
       std::cout << "Game saved to " << PGN_FILE << std::endl;
+    } else {
+      std::cerr << "Failed to open PGN file for writing" << std::endl;
     }
   }
+
+  g_gameInProgress = false;
 }
 
 int main(int argc, char* argv[]) {
+  // Register signal handlers for crash recovery
+  signal(SIGINT, signalHandler);
+  signal(SIGSEGV, signalHandler);
+  signal(SIGTERM, signalHandler);
+
   int numGames = (argc > 1) ? std::stoi(argv[1]) : 1;
 
   std::cout << "Starting " << numGames << " self-play game(s)" << std::endl;

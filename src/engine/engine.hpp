@@ -43,7 +43,7 @@ class Engine {
 
   // Search related
   int negaMax(int depth, int alpha, int beta, int ply);
-  int extendedSearch(int alpha, int beta, int depth, int ply);
+  int extendedSearch(int alpha, int beta, int ply);
   void orderMoves(Movelist& moves);
 
   // Evaluation related fuctions
@@ -97,6 +97,8 @@ class Engine {
     auto result = board.isGameOver();
     return result.first;
   }
+
+  std::string moveToSan(const std::string& uciMove);
 };
 
 #endif
