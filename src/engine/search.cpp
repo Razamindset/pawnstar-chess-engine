@@ -96,7 +96,7 @@ int Engine::extendedSearch(int alpha, int beta, int ply) {
     // Negamax with alpha-beta pruning: The roles of alpha and beta are
     // swapped because each layer alternates between maximizing and
     // minimizing.
-    int score = -extendedSearch(-beta, -alpha, ply);
+    int score = -evaluatePosition(board, ply);
     board.unmakeMove(move);
 
     // Beta cutoff: If we find a move better than beta for the maximizing
@@ -217,7 +217,7 @@ std::string Engine::getBestMove(int depth) {
     }
   }
 
-  std::cout << "Eval " << bestScore << "\n";
+  std::cout << "info depth 4 score cp " << bestScore << "\n";
 
   // ! Fix this uci format mate distance reporting
   // if (std::abs(bestScore) > MATE_SCORE - 100) {  // It's a mate score
