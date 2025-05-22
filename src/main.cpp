@@ -38,6 +38,8 @@ class UCIAdapter {
       std::cout << "readyok" << std::endl;
     } else if (token == "position") {
       handlePosition(iss);
+    } else if (token == "d") {
+      engine->printBoard();
     } else if (token == "go") {
       handleGo();
     } else if (token == "stop") {
