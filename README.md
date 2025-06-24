@@ -1,5 +1,11 @@
 # PawnStar UCI Chess Engine
 
+**⚠️ Important Notice ⚠️**
+
+This project is no longer actively maintained or updated in this repository. We are in the process of starting anew with a redesigned and improved version and a new repo.
+
+---
+
 PawnStar is a UCI chess engine written in C++ that uses the [chess-library](https://github.com/Disservin/chess-library) for board operations and move validation.
 
 ## Building the Project
